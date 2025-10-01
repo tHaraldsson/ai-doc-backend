@@ -1,5 +1,7 @@
 package com.haraldsson.aidocbackend.filemanagement.controller;
 
+import com.haraldsson.aidocbackend.filemanagement.model.Document;
+import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +15,12 @@ import java.util.Optional;
 @RequestMapping("/api")
 public class FileUploadController {
 
+    private final DocumentService documentService;
+
+    public FileUploadController(DocumentService documentService) {
+        this.documentService = documentService;
+    }
+
     @PostMapping("/upload")
     public ResponseEntity<String> uploadPdf(@RequestParam("file") MultipartFile file) {
         return Optional.ofNullable(file)
@@ -22,11 +30,15 @@ public class FileUploadController {
                         PDFTextStripper pdfStripper = new PDFTextStripper();
                         String text = pdfStripper.getText(document);
 
+                        Document doc = new Document();
+                        doc.setFileName(f.getOriginalFilename());
+                        doc.setContent(text);
+
+                        documentService.save(doc);
 
                         String preview = text.length() > 200 ? text.substring(0, 200) : text;
                         System.out.println("Preview: " + preview + "...");
 
-                        // TODO: spara texten i databasen
                         return ResponseEntity.ok("File uploaded and text extracted successfully");
                     } catch (IOException e) {
                         e.printStackTrace();

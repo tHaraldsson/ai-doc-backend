@@ -23,4 +23,12 @@ public class DocumentService {
         }
         return sb.toString();
     }
+
+    public List<Document> getAllDocuments() {
+        return documentRepository.findAll();
+    }
+
+    public void save(Document document) {
+        documentRepository.save(document);
+    }
 }
