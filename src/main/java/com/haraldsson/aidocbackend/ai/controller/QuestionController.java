@@ -47,7 +47,7 @@ public class QuestionController {
 
             String allText = documentService.getAllText();
 
-            return ResponseEntity.ok("All text from DB: " + allText);
+            return ResponseEntity.ok(allText);
     }
 
     @GetMapping("/ai-test")
