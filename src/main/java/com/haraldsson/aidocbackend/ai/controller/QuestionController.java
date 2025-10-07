@@ -1,4 +1,4 @@
-package com.haraldsson.aidocbackend.filemanagement.controller;
+package com.haraldsson.aidocbackend.ai.controller;
 
 import com.haraldsson.aidocbackend.ai.service.AiService;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;

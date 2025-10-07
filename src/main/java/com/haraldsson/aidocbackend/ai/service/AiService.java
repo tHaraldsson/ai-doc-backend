@@ -29,7 +29,7 @@ public class AiService {
                 .build();
     }
 
-    
+
     public String askQuestion(String question) {
         try {
             Map<String, Object> requestBody = new HashMap<>();
