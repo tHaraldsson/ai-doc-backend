@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -22,7 +24,7 @@ public class FileUploadController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<String> uploadPdf(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<Map<String, String>> uploadPdf(@RequestParam("file") MultipartFile file) {
         return Optional.ofNullable(file)
                 .filter(f -> !f.isEmpty())
                 .map(f -> {
@@ -39,12 +41,23 @@ public class FileUploadController {
                         String preview = text.length() > 200 ? text.substring(0, 200) : text;
                         System.out.println("Preview: " + preview + "...");
 
-                        return ResponseEntity.ok("File uploaded and text extracted successfully");
+                        Map<String, String> response = new HashMap<>();
+                        response.put("message", "File uploaded and text extracted successfully");
+                        response.put("filename", f.getOriginalFilename());
+                        return ResponseEntity.ok(response);
+
                     } catch (IOException e) {
                         e.printStackTrace();
-                        return ResponseEntity.status(500).body("Error when handling file");
+                        Map<String, String> errorResponse = new HashMap<>();
+                        errorResponse.put("error", "error when handling file");
+                        return ResponseEntity.status(500).body(errorResponse);
                     }
                 })
-                .orElseGet(() -> ResponseEntity.badRequest().body("No file selected"));
+                .orElseGet(() -> {
+                    Map<String, String> errorResponse = new HashMap<>();
+                    errorResponse.put("error", "No file selected");
+                    return ResponseEntity.badRequest().body(errorResponse);
+                });
     }
+
 }
