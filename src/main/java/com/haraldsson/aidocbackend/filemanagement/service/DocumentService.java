@@ -31,4 +31,6 @@ public class DocumentService {
     public void save(Document document) {
         documentRepository.save(document);
     }
+
+    public void deleteDocument(Long id) { documentRepository.deleteById(id); }
 }

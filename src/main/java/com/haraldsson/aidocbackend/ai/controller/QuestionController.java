@@ -23,7 +23,7 @@ public class QuestionController {
             String allText = documentService.getAllText();
 
             String answer = aiService.askQuestionAboutDocument(allText, question);
-            return ResponseEntity.ok("Svar: " + answer);
+            return ResponseEntity.ok(answer);
     }
 
     @GetMapping("/summarize")

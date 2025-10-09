@@ -60,4 +60,13 @@ public class FileUploadController {
                 });
     }
 
+    @DeleteMapping("/deletedocument/{id}")
+    public ResponseEntity<Map<String, String>> deleteDocument(@PathVariable("id") Long id) {
+        documentService.deleteDocument(id);
+
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "Document with id: " + id + " deleted successfully");
+        return ResponseEntity.ok(response);
+    }
+
 }
