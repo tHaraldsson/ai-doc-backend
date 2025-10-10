@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -67,6 +68,12 @@ public class FileUploadController {
         Map<String, String> response = new HashMap<>();
         response.put("message", "Document with id: " + id + " deleted successfully");
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/documents")
+    public ResponseEntity<List<Document>> getAllDocuments() {
+        List<Document> documents = documentService.getAllDocuments();
+        return ResponseEntity.ok(documents);
     }
 
 }
