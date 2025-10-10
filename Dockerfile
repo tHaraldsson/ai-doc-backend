@@ -1,8 +1,8 @@
-FROM gradle:7.6-jdk21 AS build
+FROM openjdk:21-jdk AS build
 WORKDIR /app
 COPY build.gradle .
 COPY src ./src
-RUN gradle clean build -x test
+RUN ./gradlew clean build -x test
 
 FROM openjdk:21-jdk-slim
 WORKDIR /app
