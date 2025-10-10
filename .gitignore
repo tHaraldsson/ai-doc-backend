@@ -5,6 +5,11 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# UNDANTAG för gradle wrapper
+!gradlew
+!gradlew.bat
+!gradle/wrapper/
+
 ### STS ###
 .apt_generated
 .classpath
