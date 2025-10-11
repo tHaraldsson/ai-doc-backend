@@ -2,9 +2,13 @@ package com.haraldsson.aidocbackend.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
+
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -26,6 +30,10 @@ public class AiService {
                 .baseUrl("https://api.openai.com/v1")
                 .defaultHeader("Authorization", "Bearer " + openaiToken)
                 .defaultHeader("Content-Type", "application/json")
+                .clientConnector(new ReactorClientHttpConnector(
+                        HttpClient.create()
+                                .responseTimeout(Duration.ofSeconds(60))
+                ))
                 .build();
     }
 
@@ -37,7 +45,7 @@ public class AiService {
             requestBody.put("messages", new Object[]{
                     Map.of("role", "user", "content", question)
             });
-            requestBody.put("max_tokens", 150);
+            requestBody.put("max_tokens", 1000);
             requestBody.put("temperature", 0.7);
 
             Mono<String> response = webClient.post()
@@ -127,7 +135,7 @@ public class AiService {
     }
 
     private String createDocumentPrompt(String context, String question) {
-        String truncatedContext = truncateContext(context, 3000);
+        String truncatedContext = truncateContext(context, 13000);
         return String.format(
                 "Based on following document:\n\n\"%s\"\n\nAnswer this question in swedish: %s\n\nGive a short answer.",
                 truncatedContext, question
