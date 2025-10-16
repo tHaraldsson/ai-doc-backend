@@ -1,9 +1,11 @@
 package com.haraldsson.aidocbackend.ai.controller;
 
+import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
 import com.haraldsson.aidocbackend.ai.service.AiService;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api")
@@ -18,12 +20,17 @@ public class QuestionController {
     }
 
     @GetMapping("/ask")
-    public ResponseEntity<String> askQuestion(@RequestParam String question) {
+    public Mono<ResponseEntity<AiResponseDTO>> askQuestion(@RequestParam String question) {
 
+        try {
             String allText = documentService.getAllText();
 
-            String answer = aiService.askQuestionAboutDocument(allText, question);
-            return ResponseEntity.ok(answer);
+            return aiService.askQuestionAboutDocument(allText, question)
+                    .map(ResponseEntity::ok);
+        } catch (Exception e) {
+            return Mono.just(ResponseEntity.internalServerError()
+                    .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0)));
+        }
     }
 
     @GetMapping("/summarize")
@@ -36,10 +43,13 @@ public class QuestionController {
     }
 
     @GetMapping("/ask-direct")
-    public ResponseEntity<String> askDirectQuestion(@RequestParam String question) {
+    public Mono<ResponseEntity<AiResponseDTO>> askDirectQuestion(@RequestParam String question) {
 
-            String answer = aiService.askQuestion(question);
-            return ResponseEntity.ok("Answer: " + answer);
+
+            return aiService.askQuestion(question)
+                    .map(ResponseEntity::ok)
+                    .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
+                            .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
     }
 
     @GetMapping("/textindb")
@@ -50,10 +60,10 @@ public class QuestionController {
             return ResponseEntity.ok(allText);
     }
 
-    @GetMapping("/ai-test")
-    public ResponseEntity<String> testAi() {
-
-            String result = aiService.testConnection();
-            return ResponseEntity.ok(result);
-    }
+//    @GetMapping("/ai-test")
+//    public ResponseEntity<String> testAi() {
+//
+//            String result = aiService.testConnection();
+//            return ResponseEntity.ok(result);
+//    }
 }

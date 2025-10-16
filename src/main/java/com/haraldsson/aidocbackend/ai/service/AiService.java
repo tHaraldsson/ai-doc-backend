@@ -2,6 +2,7 @@ package com.haraldsson.aidocbackend.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -38,8 +39,8 @@ public class AiService {
     }
 
 
-    public String askQuestion(String question) {
-        try {
+    public Mono<AiResponseDTO> askQuestion(String question) {
+
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("model", "gpt-3.5-turbo");
             requestBody.put("messages", new Object[]{
@@ -48,21 +49,20 @@ public class AiService {
             requestBody.put("max_tokens", 1000);
             requestBody.put("temperature", 0.7);
 
-            Mono<String> response = webClient.post()
+            return webClient.post()
                     .uri("/chat/completions")
                     .bodyValue(requestBody)
                     .retrieve()
-                    .bodyToMono(String.class);
-
-            String jsonResponse = response.block();
-            return extractOpenAIAnswer(jsonResponse);
-
-        } catch (Exception e) {
-            System.err.println("OpenAI API error: " + e.getMessage());
-            return "Could not communicate with OpenAI: " + e.getMessage();
-        }
+                    .bodyToMono(String.class)
+                    .flatMap(this::parseOpenAiResponse)
+                    .onErrorResume(e -> Mono.just(new AiResponseDTO(
+                            "Could not communicate with OpenAI: " + e.getMessage(),
+                            "error",
+                            0
+                    )));
     }
 
+    // TODO - Change to Mono/delete if not used
     public String summarizeDocument(String text) {
         try {
             String prompt = "Summarize following text in 2-3 sentences and in swedish:\n\n" +
@@ -90,22 +90,32 @@ public class AiService {
         }
     }
 
-    public String testConnection() {
+    private Mono<AiResponseDTO> parseOpenAiResponse(String jsonresponse) {
         try {
+            JsonNode root = objectMapper.readTree(jsonresponse);
+            JsonNode choices = root.get("choices");
+            JsonNode firstChoice = choices.get(0);
+            JsonNode message = firstChoice.get("message");
 
-            String result = askQuestion("Hello! Is the connection working? Answer in swedish.");
+            if (message != null && message.has("content")) {
+                String content = message.get("content").asText().trim();
+                String model = root.get("model").asText();
+                JsonNode usage = root.get("usage");
+                int tokens = usage != null ? usage.get("total_tokens").asInt() : 0;
 
-            if (result != null && !result.contains("saknas") && !result.contains("fel")) {
-                return "Connection to Open-AI succeeded! Test answer: " + result;
-            } else {
-                return "Connection failure. Answer: " + result;
+                System.out.println("OpenAI answer: " + content);
+
+                return Mono.just(new AiResponseDTO(content, model, tokens));
             }
 
+            return Mono.just(new AiResponseDTO("could not extract OpenAI answer", "unknown", 0));
         } catch (Exception e) {
-            return "Connection error: " + e.getMessage();
+            System.err.println("Error when parsing OpenAI answer: " + e.getMessage());
+            return Mono.just(new AiResponseDTO("Error when extracting AI answer: ", "error", 0));
         }
     }
 
+    // TODO - Remove if not needed anymore
     private String extractOpenAIAnswer(String jsonResponse) {
         try {
             JsonNode root = objectMapper.readTree(jsonResponse);
@@ -128,7 +138,7 @@ public class AiService {
         }
     }
 
-    public String askQuestionAboutDocument(String context, String question) {
+    public Mono<AiResponseDTO> askQuestionAboutDocument(String context, String question) {
 
         String prompt = createDocumentPrompt(context, question);
         return askQuestion(prompt);
