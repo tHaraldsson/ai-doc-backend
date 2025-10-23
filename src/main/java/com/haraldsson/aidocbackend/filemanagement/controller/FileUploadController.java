@@ -83,6 +83,12 @@ public class FileUploadController {
             return ResponseEntity.ok(documents);
         }
 
+    @GetMapping("/textindb")
+    public ResponseEntity<String> getTextInDb() {
 
+        String allText = documentService.getAllText();
+
+        return ResponseEntity.ok(allText);
+    }
 
 }

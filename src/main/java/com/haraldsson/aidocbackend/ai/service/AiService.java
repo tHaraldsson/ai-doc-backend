@@ -62,7 +62,7 @@ public class AiService {
                     )));
     }
 
-    // TODO - Change to Mono/delete if not used
+    // TODO - Change to Mono or delete if not used
     public String summarizeDocument(String text) {
         try {
             String prompt = "Summarize following text in 2-3 sentences and in swedish:\n\n" +

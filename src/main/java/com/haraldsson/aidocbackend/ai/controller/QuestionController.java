@@ -52,13 +52,7 @@ public class QuestionController {
                             .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
     }
 
-    @GetMapping("/textindb")
-    public ResponseEntity<String> getTextInDb() {
 
-            String allText = documentService.getAllText();
-
-            return ResponseEntity.ok(allText);
-    }
 
 //    @GetMapping("/ai-test")
 //    public ResponseEntity<String> testAi() {
