@@ -1,5 +1,6 @@
 package com.haraldsson.aidocbackend.filemanagement.controller;
 
+import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponse;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -10,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -24,7 +26,7 @@ public class FileUploadController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, String>> uploadPdf(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<UploadResponse> uploadPdf(@RequestParam("file") MultipartFile file) {
         return Optional.ofNullable(file)
                 .filter(f -> !f.isEmpty())
                 .map(f -> {
@@ -39,25 +41,54 @@ public class FileUploadController {
                         documentService.save(doc);
 
                         String preview = text.length() > 200 ? text.substring(0, 200) : text;
-                        System.out.println("Preview: " + preview + "...");
 
-                        Map<String, String> response = new HashMap<>();
-                        response.put("message", "File uploaded and text extracted successfully");
-                        response.put("filename", f.getOriginalFilename());
-                        return ResponseEntity.ok(response);
+
+                        return ResponseEntity.ok(new UploadResponse(
+                                "File uploaded and text extracted successfully",
+                                f.getOriginalFilename(),
+                                preview + "..."
+                        ));
 
                     } catch (IOException e) {
                         e.printStackTrace();
-                        Map<String, String> errorResponse = new HashMap<>();
-                        errorResponse.put("error", "error when handling file");
-                        return ResponseEntity.status(500).body(errorResponse);
+
+                        return ResponseEntity.status(500)
+                                .body(new UploadResponse("Error when handling file", null, null));
                     }
                 })
-                .orElseGet(() -> {
-                    Map<String, String> errorResponse = new HashMap<>();
-                    errorResponse.put("error", "No file selected");
-                    return ResponseEntity.badRequest().body(errorResponse);
-                });
+                .orElseGet(() -> ResponseEntity.badRequest()
+                        .body(new UploadResponse("No file selected", null, null)));
+                }
+
+
+    @DeleteMapping("/deletedocument/{id}")
+    public ResponseEntity<UploadResponse> deleteDocument(@PathVariable("id") Long id) {
+        try {
+            documentService.deleteDocument(id);
+
+            return ResponseEntity.ok(new UploadResponse(
+                    "Document deleted successfully",
+                    null,
+                    null
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(new UploadResponse("Error when deleting document: " + e.getMessage(), null, null));
+        }
+    }
+
+        @GetMapping("/documents")
+        public ResponseEntity<List<Document>> getAllDocuments() {
+            List<Document> documents = documentService.getAllDocuments();
+            return ResponseEntity.ok(documents);
+        }
+
+    @GetMapping("/textindb")
+    public ResponseEntity<String> getTextInDb() {
+
+        String allText = documentService.getAllText();
+
+        return ResponseEntity.ok(allText);
     }
 
 }

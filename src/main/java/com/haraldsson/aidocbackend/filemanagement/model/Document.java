@@ -10,6 +10,7 @@ public class Document {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
 
+    @Column(name = "file_name")
     private String fileName;
 
     @Lob
