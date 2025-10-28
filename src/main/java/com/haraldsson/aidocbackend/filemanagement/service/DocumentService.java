@@ -3,8 +3,9 @@ package com.haraldsson.aidocbackend.filemanagement.service;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
 import com.haraldsson.aidocbackend.filemanagement.repository.DocumentRepository;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-import java.util.List;
 
 @Service
 public class DocumentService {
@@ -15,22 +16,21 @@ public class DocumentService {
         this.documentRepository = documentRepository;
     }
 
-    public String getAllText() {
-        List<Document> documents = documentRepository.findAll();
-        StringBuilder sb = new StringBuilder();
-        for (Document document : documents) {
-            sb.append(document.getContent()).append("\n");
-        }
-        return sb.toString();
+    public Mono<String> getAllText() {
+
+        return documentRepository.findAll()
+                .map(Document::getContent)
+                .reduce(new StringBuilder(), (sb, content) -> sb.append(content).append("\n"))
+                .map(StringBuilder::toString);
     }
 
-    public List<Document> getAllDocuments() {
+    public Flux<Document> getAllDocuments() {
         return documentRepository.findAll();
     }
 
-    public void save(Document document) {
-        documentRepository.save(document);
+    public Mono<Document> save(Document document) {
+       return documentRepository.save(document);
     }
 
-    public void deleteDocument(Long id) { documentRepository.deleteById(id); }
+    public Mono<Void> deleteDocument(Long id) {return documentRepository.deleteById(id); }
 }
