@@ -62,33 +62,7 @@ public class AiService {
                     )));
     }
 
-    // TODO - Change to Mono or delete if not used
-    public String summarizeDocument(String text) {
-        try {
-            String prompt = "Summarize following text in 2-3 sentences and in swedish:\n\n" +
-                    truncateContext(text, 4000);
 
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", "gpt-3.5-turbo");
-            requestBody.put("messages", new Object[]{
-                    Map.of("role", "user", "content", prompt)
-            });
-            requestBody.put("max_tokens", 200);
-            requestBody.put("temperature", 0.5);
-
-            Mono<String> response = webClient.post()
-                    .uri("/chat/completions")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class);
-
-            String jsonResponse = response.block();
-            return extractOpenAIAnswer(jsonResponse);
-
-        } catch (Exception e) {
-            return "Could not summarize document: " + e.getMessage();
-        }
-    }
 
     private Mono<AiResponseDTO> parseOpenAiResponse(String jsonresponse) {
         try {
@@ -112,29 +86,6 @@ public class AiService {
         } catch (Exception e) {
             System.err.println("Error when parsing OpenAI answer: " + e.getMessage());
             return Mono.just(new AiResponseDTO("Error when extracting AI answer: ", "error", 0));
-        }
-    }
-
-    // TODO - Remove if not needed anymore
-    private String extractOpenAIAnswer(String jsonResponse) {
-        try {
-            JsonNode root = objectMapper.readTree(jsonResponse);
-            JsonNode choices = root.get("choices");
-
-            JsonNode firstChoice = choices.get(0);
-            JsonNode message = firstChoice.get("message");
-
-            if (message != null && message.has("content")) {
-                String content = message.get("content").asText();
-                System.out.println("OpenAI answer: " + content);
-                return content.trim();
-            }
-
-            return "Could not extract OpenAI answer";
-
-        } catch (Exception e) {
-            System.err.println("Error when parsing OpenAI answer: " + e.getMessage());
-            return "Error when extracting AI answer";
         }
     }
 

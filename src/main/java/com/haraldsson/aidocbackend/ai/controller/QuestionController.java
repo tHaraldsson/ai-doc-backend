@@ -22,25 +22,14 @@ public class QuestionController {
     @GetMapping("/ask")
     public Mono<ResponseEntity<AiResponseDTO>> askQuestion(@RequestParam String question) {
 
-        try {
-            String allText = documentService.getAllText();
-
-            return aiService.askQuestionAboutDocument(allText, question)
-                    .map(ResponseEntity::ok);
-        } catch (Exception e) {
-            return Mono.just(ResponseEntity.internalServerError()
-                    .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0)));
-        }
+        return documentService.getAllText()
+                .flatMap(allText -> aiService.askQuestionAboutDocument(allText, question))
+                .map(ResponseEntity::ok)
+                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
+                        .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
     }
 
-    @GetMapping("/summarize")
-    public ResponseEntity<String> summarizeDocument() {
 
-            String allText = documentService.getAllText();
-
-            String summary = aiService.summarizeDocument(allText);
-            return ResponseEntity.ok("Summary: " + summary);
-    }
 
     @GetMapping("/ask-direct")
     public Mono<ResponseEntity<AiResponseDTO>> askDirectQuestion(@RequestParam String question) {

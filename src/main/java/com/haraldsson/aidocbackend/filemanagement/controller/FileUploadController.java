@@ -8,6 +8,8 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -26,69 +28,61 @@ public class FileUploadController {
     }
 
     @PostMapping("/upload")
-    public ResponseEntity<UploadResponse> uploadPdf(@RequestParam("file") MultipartFile file) {
-        return Optional.ofNullable(file)
-                .filter(f -> !f.isEmpty())
-                .map(f -> {
-                    try (PDDocument document = PDDocument.load(f.getInputStream(), (String) null)) {
-                        PDFTextStripper pdfStripper = new PDFTextStripper();
-                        String text = pdfStripper.getText(document);
+    public Mono<ResponseEntity<UploadResponse>> uploadPdf(@RequestParam("file") MultipartFile file) {
 
-                        Document doc = new Document();
-                        doc.setFileName(f.getOriginalFilename());
-                        doc.setContent(text);
+        if (file.isEmpty()) {
+            return Mono.just(ResponseEntity.badRequest()
+                    .body(new UploadResponse("No file selected", null, null)));
+        }
 
-                        documentService.save(doc);
-
-                        String preview = text.length() > 200 ? text.substring(0, 200) : text;
-
-
-                        return ResponseEntity.ok(new UploadResponse(
-                                "File uploaded and text extracted successfully",
-                                f.getOriginalFilename(),
-                                preview + "..."
-                        ));
-
+        return Mono.fromCallable(() -> {
+                    try (PDDocument document = PDDocument.load(file.getInputStream(), (String) null)) {
+                        PDFTextStripper stripper = new PDFTextStripper();
+                        return stripper.getText(document);
                     } catch (IOException e) {
-                        e.printStackTrace();
-
-                        return ResponseEntity.status(500)
-                                .body(new UploadResponse("Error when handling file", null, null));
+                        throw new RuntimeException("Error handling file", e);
                     }
                 })
-                .orElseGet(() -> ResponseEntity.badRequest()
-                        .body(new UploadResponse("No file selected", null, null)));
-                }
+                .flatMap(text -> {
+                    Document document = new Document(file.getOriginalFilename(), text);
+                    String preview = text.length() > 200 ? text.substring(0, 200) : text;
+
+                    return documentService.save(document)
+                            .map(savedDoc -> ResponseEntity.ok(new UploadResponse(
+                                    "File uploaded and text extracted successfully",
+                                    file.getOriginalFilename(),
+                                    preview + "..."
+                            )));
+                })
+                .onErrorResume(e -> Mono.just(ResponseEntity.status(500)
+                        .body(new UploadResponse("Error when handling file", null, null))));
+    }
 
 
     @DeleteMapping("/deletedocument/{id}")
-    public ResponseEntity<UploadResponse> deleteDocument(@PathVariable("id") Long id) {
-        try {
-            documentService.deleteDocument(id);
+    public Mono<ResponseEntity<UploadResponse>> deleteDocument(@PathVariable("id") Long id) {
 
-            return ResponseEntity.ok(new UploadResponse(
-                    "Document deleted successfully",
-                    null,
-                    null
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body(new UploadResponse("Error when deleting document: " + e.getMessage(), null, null));
-        }
+        return documentService.deleteDocument(id)
+                .then(Mono.just(ResponseEntity.ok(new UploadResponse(
+                        "Document with id: " + id + " deleted successfully",
+                        null,
+                        null
+                ))))
+                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
+                        .body(new UploadResponse("Error deleting document: " + e.getMessage(), null, null))));
     }
 
         @GetMapping("/documents")
-        public ResponseEntity<List<Document>> getAllDocuments() {
-            List<Document> documents = documentService.getAllDocuments();
-            return ResponseEntity.ok(documents);
+        public Mono<ResponseEntity<Flux<Document>>> getAllDocuments() {
+            return Mono.just(ResponseEntity.ok(documentService.getAllDocuments()));
         }
 
     @GetMapping("/textindb")
-    public ResponseEntity<String> getTextInDb() {
-
-        String allText = documentService.getAllText();
-
-        return ResponseEntity.ok(allText);
+    public Mono<ResponseEntity<String>> getTextInDb() {
+        return documentService.getAllText()
+                .map(text -> ResponseEntity.ok(text))
+                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
+                        .body("Error: " + e.getMessage())));
     }
 
 }

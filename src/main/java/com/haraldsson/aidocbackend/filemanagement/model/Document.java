@@ -1,26 +1,35 @@
 package com.haraldsson.aidocbackend.filemanagement.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "documents")
+
+@Table("documents")
 public class Document {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
+    private Long id;
 
-    @Column(name = "file_name")
+    @Column("file_name")
     private String fileName;
 
-    @Lob
+    @Column("content")
     private String content;
 
-    public long getId() {
+    public Document() {
+    }
+
+    public Document(String fileName, String content) {
+        this.fileName = fileName;
+        this.content = content;
+    }
+
+    public Long getId() {
         return id;
     }
 
-    public void setId(long id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
