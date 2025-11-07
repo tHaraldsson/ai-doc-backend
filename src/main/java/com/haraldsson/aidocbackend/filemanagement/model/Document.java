@@ -1,27 +1,45 @@
 package com.haraldsson.aidocbackend.filemanagement.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.relational.core.mapping.Column;
+import org.springframework.data.relational.core.mapping.Table;
 
-@Entity
-@Table(name = "documents")
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+
+@Table("documents")
 public class Document {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private long id;
+    private UUID id;
 
-    @Column(name = "file_name")
+    @Column("file_name")
     private String fileName;
 
-    @Lob
+    @Column("content")
     private String content;
 
-    public long getId() {
-        return id;
+    @Column("user_id")
+    private UUID userId;
+
+    @Column("created_at")
+    private LocalDateTime createdAt;
+
+    public Document() {
     }
 
-    public void setId(long id) {
-        this.id = id;
+    public Document(String fileName, String content, UUID userId) {
+        this.fileName = fileName;
+        this.content = content;
+        this.userId = userId;
+        this.createdAt = LocalDateTime.now();
+    }
+
+
+
+    public UUID getId() {
+        return id;
     }
 
     public String getFileName() {
@@ -38,5 +56,21 @@ public class Document {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }
