@@ -4,15 +4,15 @@ package com.haraldsson.aidocbackend.user.controller;
 import com.haraldsson.aidocbackend.config.JwtTokenProvider;
 import com.haraldsson.aidocbackend.user.dto.AuthResponse;
 import com.haraldsson.aidocbackend.user.dto.LoginRequest;
+import com.haraldsson.aidocbackend.user.model.CustomUser;
 import com.haraldsson.aidocbackend.user.service.CustomUserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
@@ -21,11 +21,14 @@ import java.time.Duration;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
     private final CustomUserService customUserService;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Autowired
-    public AuthController(CustomUserService customUserService) {
+    public AuthController(CustomUserService customUserService, JwtTokenProvider jwtTokenProvider) {
         this.customUserService = customUserService;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @PostMapping("/register")
@@ -77,19 +80,48 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public Mono<ResponseEntity<AuthResponse>> logout() {
+    public Mono<ResponseEntity<AuthResponse>> logout(
+            @CookieValue(value = "jwt", required = false) String jwtToken,
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+            ) {
+
+        String username = "unkown";
+        if (jwtToken != null && jwtTokenProvider.validateToken(jwtToken)) {
+            username = jwtTokenProvider.getUsernameFromToken(jwtToken);
+        }
+
+        logger.info("Logout request from user: {}", username);
+
         ResponseCookie cookie = ResponseCookie.from("jwt", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(false)  // Put true in production
                 .path("/")
                 .maxAge(0)
                 .sameSite("Strict")
                 .build();
 
         AuthResponse response = new AuthResponse("Logout successful", null);
+
+        logger.info("User {} logged out successfully", username);
         return Mono.just(ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(response));
+    }
+
+    @GetMapping("/user")
+    public Mono<ResponseEntity<CustomUser>> getCurrentUser(
+            @CookieValue(value = "jwt", required = false) String jwtToken) {
+
+        if (jwtToken == null || !jwtTokenProvider.validateToken(jwtToken)) {
+            return Mono.just(ResponseEntity.status(401).build());
+        }
+
+        String username = jwtTokenProvider.getUsernameFromToken(jwtToken);
+        logger.debug("Current user request for: {}", username);
+
+        return customUserService.findByUsername(username)
+                .map(user -> ResponseEntity.ok().body(user))
+                .defaultIfEmpty(ResponseEntity.status(401).build());
     }
 }
 

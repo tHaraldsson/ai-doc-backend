@@ -4,23 +4,14 @@ import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponse;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
-import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
-import java.io.IOException;
-import java.util.Locale;
 import java.util.UUID;
 
 @RestController
@@ -77,8 +68,14 @@ public class FileUploadController {
     }
 
     @GetMapping("/documents")
-    public Mono<ResponseEntity<Flux<Document>>> getAllDocuments() {
-        return Mono.just(ResponseEntity.ok(documentService.getAllDocuments()));
+    public Mono<ResponseEntity<Flux<Document>>> getUserDocuments(
+            @AuthenticationPrincipal CustomUser user
+    ) {
+        if (user == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        return Mono.just(ResponseEntity.ok(documentService.getAllDocuments(user.getId())));
     }
 
     @GetMapping("/textindb")

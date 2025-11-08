@@ -78,8 +78,8 @@ public class DocumentService {
                 .map(StringBuilder::toString);
     }
 
-    public Flux<Document> getAllDocuments() {
-        return documentRepository.findAll();
+    public Flux<Document> getAllDocuments(UUID userID) {
+        return documentRepository.findByUserId(userID);
     }
 
     public Mono<Document> save(Document document) {
