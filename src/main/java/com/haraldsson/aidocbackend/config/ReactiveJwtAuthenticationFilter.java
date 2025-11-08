@@ -62,6 +62,14 @@ public class ReactiveJwtAuthenticationFilter implements WebFilter {
     }
 
     private String getJwtFromRequest(org.springframework.http.server.reactive.ServerHttpRequest request) {
+
+        if (request.getCookies().containsKey("jwt")) {
+            String jwtCookie = request.getCookies().getFirst("jwt").getValue();
+
+            if (StringUtils.hasText(jwtCookie)) {
+                return jwtCookie;
+            }
+        }
         String bearerToken = request.getHeaders().getFirst("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7);

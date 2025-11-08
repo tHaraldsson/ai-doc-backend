@@ -1,6 +1,7 @@
 package com.haraldsson.aidocbackend.user.service;
 
 import com.haraldsson.aidocbackend.config.JwtTokenProvider;
+import com.haraldsson.aidocbackend.user.dto.AuthResultDTO;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
 import com.haraldsson.aidocbackend.user.repository.CustomUserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,7 +24,7 @@ public class CustomUserService {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
-    public Mono<String> loginUser(String username, String password) {
+    public Mono<AuthResultDTO> loginUser(String username, String password) {
 
         System.out.println("--Custom user service login --");
         System.out.println("looking for user: " + username);
@@ -42,7 +43,7 @@ public class CustomUserService {
 
                     String token = jwtTokenProvider.generateToken(username);
                     System.out.println("Token generated successfully");
-                    return Mono.just(token);
+                    return Mono.just(new AuthResultDTO(token, username));
                 })
                 .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
                 .doOnError(error -> System.out.println("login Error: " + error.getMessage()));

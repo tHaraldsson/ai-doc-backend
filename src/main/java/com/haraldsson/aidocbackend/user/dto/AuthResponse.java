@@ -2,20 +2,17 @@ package com.haraldsson.aidocbackend.user.dto;
 
 public class AuthResponse {
 
-    private String token;
     private String username;
     private String message;
     private boolean success;
 
-    public AuthResponse(String token, String username) {
-        this.token = token;
+    public AuthResponse(String message, String username) {
         this.username = username;
         this.success = true;
-        this.message = "Login successful";
+        this.message = message;
     }
 
     public AuthResponse(String errorMessage) {
-        this.token = null;
         this.username = null;
         this.success = false;
         this.message = errorMessage;
@@ -27,14 +24,6 @@ public class AuthResponse {
 
     public void setSuccess(boolean success) {
         this.success = success;
-    }
-
-    public String getToken() {
-        return token;
-    }
-
-    public void setToken(String token) {
-        this.token = token;
     }
 
     public String getUsername() {
