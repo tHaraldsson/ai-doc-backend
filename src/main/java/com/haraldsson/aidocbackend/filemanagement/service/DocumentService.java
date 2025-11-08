@@ -70,12 +70,13 @@ public class DocumentService {
         return documentRepository.save(document);
     }
 
-    public Mono<String> getAllText() {
+    public Mono<String> getTextByUserId(UUID userId) {
 
-        return documentRepository.findAll()
+        return documentRepository.findByUserId(userId)
                 .map(Document::getContent)
                 .reduce(new StringBuilder(), (sb, content) -> sb.append(content).append("\n"))
-                .map(StringBuilder::toString);
+                .map(StringBuilder::toString)
+                .defaultIfEmpty("No documents found for this user");
     }
 
     public Flux<Document> getAllDocuments(UUID userID) {

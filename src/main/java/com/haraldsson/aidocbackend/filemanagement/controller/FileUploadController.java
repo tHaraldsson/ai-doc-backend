@@ -79,8 +79,14 @@ public class FileUploadController {
     }
 
     @GetMapping("/textindb")
-    public Mono<ResponseEntity<String>> getTextInDb() {
-        return documentService.getAllText()
+    public Mono<ResponseEntity<String>> getUserText(
+            @AuthenticationPrincipal CustomUser user
+    ) {
+        if (user == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        return documentService.getTextByUserId(user.getId())
                 .map(text -> ResponseEntity.ok(text))
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                         .body("Error: " + e.getMessage())));
