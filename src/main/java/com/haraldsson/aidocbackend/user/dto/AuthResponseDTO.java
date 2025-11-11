@@ -1,18 +1,18 @@
 package com.haraldsson.aidocbackend.user.dto;
 
-public class AuthResponse {
+public class AuthResponseDTO {
 
     private String username;
     private String message;
     private boolean success;
 
-    public AuthResponse(String message, String username) {
+    public AuthResponseDTO(String message, String username) {
         this.username = username;
         this.success = true;
         this.message = message;
     }
 
-    public AuthResponse(String errorMessage) {
+    public AuthResponseDTO(String errorMessage) {
         this.username = null;
         this.success = false;
         this.message = errorMessage;

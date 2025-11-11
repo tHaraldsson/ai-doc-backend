@@ -1,6 +1,6 @@
 package com.haraldsson.aidocbackend.user.dto;
 
-public class LoginRequest {
+public class LoginRequestDTO {
 
     private String username;
     private String password;

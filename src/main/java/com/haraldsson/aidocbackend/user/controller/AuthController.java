@@ -2,8 +2,8 @@ package com.haraldsson.aidocbackend.user.controller;
 
 
 import com.haraldsson.aidocbackend.config.JwtTokenProvider;
-import com.haraldsson.aidocbackend.user.dto.AuthResponse;
-import com.haraldsson.aidocbackend.user.dto.LoginRequest;
+import com.haraldsson.aidocbackend.user.dto.AuthResponseDTO;
+import com.haraldsson.aidocbackend.user.dto.LoginRequestDTO;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
 import com.haraldsson.aidocbackend.user.service.CustomUserService;
 import org.slf4j.Logger;
@@ -32,21 +32,21 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public Mono<ResponseEntity<AuthResponse>> register(@RequestBody LoginRequest request) {
+    public Mono<ResponseEntity<AuthResponseDTO>> register(@RequestBody LoginRequestDTO request) {
 
         return customUserService.registerUser(request.getUsername(), request.getPassword())
                 .map(user -> {
-                    AuthResponse response = new AuthResponse("Registration successful. Please login", user.getUsername());
+                    AuthResponseDTO response = new AuthResponseDTO("Registration successful. Please login", user.getUsername());
                     return ResponseEntity.ok(response);
                 })
                 .onErrorResume(e -> {
-                    AuthResponse response = new AuthResponse(e.getMessage());
+                    AuthResponseDTO response = new AuthResponseDTO(e.getMessage());
                     return Mono.just(ResponseEntity.badRequest().body(response));
                 });
     }
 
     @PostMapping("/login")
-    public Mono<ResponseEntity<AuthResponse>> login (@RequestBody LoginRequest request) {
+    public Mono<ResponseEntity<AuthResponseDTO>> login (@RequestBody LoginRequestDTO request) {
 
         System.out.println("=== LOGIN ATTEMPT ===");
         System.out.println("Username: " + request.getUsername());
@@ -59,11 +59,11 @@ public class AuthController {
                             .httpOnly(true)
                             .secure(false)
                             .path("/")
-                            .maxAge(Duration.ofHours(24))
+                            .maxAge(Duration.ofHours(12))
                             .sameSite("Strict")
                             .build();
 
-                    AuthResponse response = new AuthResponse("Login successful", authResult.getUsername());
+                    AuthResponseDTO response = new AuthResponseDTO("Login successful", authResult.getUsername());
 
                     return Mono.just(ResponseEntity.ok()
                             .header(HttpHeaders.SET_COOKIE, cookie.toString())
@@ -73,19 +73,19 @@ public class AuthController {
                 .onErrorResume(e -> {
                     System.out.println("=== LOGIN FAILED: " + e.getMessage() + " ===");
                     return Mono.just(ResponseEntity.status(401)
-                            .body(new AuthResponse(e.getMessage())));
+                            .body(new AuthResponseDTO(e.getMessage())));
                 })
                 .doOnSubscribe(sub -> System.out.println("Starting login process..."))
                 .doOnTerminate(() -> System.out.println("Login process completed"));
     }
 
     @PostMapping("/logout")
-    public Mono<ResponseEntity<AuthResponse>> logout(
+    public Mono<ResponseEntity<AuthResponseDTO>> logout(
             @CookieValue(value = "jwt", required = false) String jwtToken,
             @RequestHeader(value = "Authorization", required = false) String authHeader
             ) {
 
-        String username = "unkown";
+        String username = "unknown";
         if (jwtToken != null && jwtTokenProvider.validateToken(jwtToken)) {
             username = jwtTokenProvider.getUsernameFromToken(jwtToken);
         }
@@ -100,7 +100,7 @@ public class AuthController {
                 .sameSite("Strict")
                 .build();
 
-        AuthResponse response = new AuthResponse("Logout successful", null);
+        AuthResponseDTO response = new AuthResponseDTO("Logout successful", null);
 
         logger.info("User {} logged out successfully", username);
         return Mono.just(ResponseEntity.ok()

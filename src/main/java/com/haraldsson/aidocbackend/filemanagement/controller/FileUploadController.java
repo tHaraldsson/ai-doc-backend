@@ -1,6 +1,6 @@
 package com.haraldsson.aidocbackend.filemanagement.controller;
 
-import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponse;
+import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponseDTO;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
@@ -25,14 +25,14 @@ public class FileUploadController {
     }
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
-    public Mono<ResponseEntity<UploadResponse>> uploadPdf(
+    public Mono<ResponseEntity<UploadResponseDTO>> uploadPdf(
             @RequestPart("file") FilePart filePart,
             @AuthenticationPrincipal CustomUser user) {
 
         if (user == null) {
             System.out.println("User is NULL - returning 401");
             return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new UploadResponse("Not Authenticated", null, null)));
+                    .body(new UploadResponseDTO("Not Authenticated", null, null)));
         }
 
         return documentService.processAndSavePdf(filePart, user)
@@ -41,7 +41,7 @@ public class FileUploadController {
                             ? savedDoc.getContent().substring(0, 200) + "..."
                             : savedDoc.getContent();
 
-                    return ResponseEntity.ok(new UploadResponse(
+                    return ResponseEntity.ok(new UploadResponseDTO(
                             "File uploaded successfully",
                             savedDoc.getFileName(),
                             preview
@@ -49,22 +49,22 @@ public class FileUploadController {
                 })
                 .onErrorResume(e -> {
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body(new UploadResponse("Upload failed: " + e.getMessage(), null, null)));
+                            .body(new UploadResponseDTO("Upload failed: " + e.getMessage(), null, null)));
                 });
     }
 
 
     @DeleteMapping("/deletedocument/{id}")
-    public Mono<ResponseEntity<UploadResponse>> deleteDocument(@PathVariable("id") UUID id) {
+    public Mono<ResponseEntity<UploadResponseDTO>> deleteDocument(@PathVariable("id") UUID id) {
 
         return documentService.deleteDocument(id)
-                .then(Mono.just(ResponseEntity.ok(new UploadResponse(
+                .then(Mono.just(ResponseEntity.ok(new UploadResponseDTO(
                         "Document with id: " + id + " deleted successfully",
                         null,
                         null
                 ))))
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
-                        .body(new UploadResponse("Error deleting document: " + e.getMessage(), null, null))));
+                        .body(new UploadResponseDTO("Error deleting document: " + e.getMessage(), null, null))));
     }
 
     @GetMapping("/documents")

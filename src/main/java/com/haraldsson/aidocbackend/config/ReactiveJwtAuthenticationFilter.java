@@ -1,6 +1,7 @@
 package com.haraldsson.aidocbackend.config;
 
 import com.haraldsson.aidocbackend.user.service.CustomUserService;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
@@ -61,7 +62,7 @@ public class ReactiveJwtAuthenticationFilter implements WebFilter {
         }
     }
 
-    private String getJwtFromRequest(org.springframework.http.server.reactive.ServerHttpRequest request) {
+    private String getJwtFromRequest(ServerHttpRequest request) {
 
         if (request.getCookies().containsKey("jwt")) {
             String jwtCookie = request.getCookies().getFirst("jwt").getValue();

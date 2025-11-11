@@ -1,7 +1,7 @@
 package com.haraldsson.aidocbackend.ai.controller;
 
 import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
-import com.haraldsson.aidocbackend.ai.dto.AskQuestionRequest;
+import com.haraldsson.aidocbackend.ai.dto.AskQuestionRequestDTO;
 import com.haraldsson.aidocbackend.ai.service.AiService;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
@@ -24,7 +24,7 @@ public class QuestionController {
 
     @PostMapping("/ask")
     public Mono<ResponseEntity<AiResponseDTO>> askQuestion(
-            @RequestBody AskQuestionRequest request,
+            @RequestBody AskQuestionRequestDTO request,
             @AuthenticationPrincipal CustomUser user
     ) {
 

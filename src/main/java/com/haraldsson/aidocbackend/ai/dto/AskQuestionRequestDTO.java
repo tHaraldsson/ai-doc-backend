@@ -1,6 +1,6 @@
 package com.haraldsson.aidocbackend.ai.dto;
 
-public class AskQuestionRequest {
+public class AskQuestionRequestDTO {
 
     private String question;
     private String documentId;
