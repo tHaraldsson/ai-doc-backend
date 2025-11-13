@@ -94,7 +94,7 @@ public class AuthController {
 
         ResponseCookie cookie = ResponseCookie.from("jwt", "")
                 .httpOnly(true)
-                .secure(false)  // Put true in production
+                .secure(true)  // Put true in production
                 .path("/")
                 .maxAge(0)
                 .sameSite("Strict")
