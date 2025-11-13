@@ -1,9 +1,12 @@
 package com.haraldsson.aidocbackend.ai.controller;
 
 import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
+import com.haraldsson.aidocbackend.ai.dto.AskQuestionRequestDTO;
 import com.haraldsson.aidocbackend.ai.service.AiService;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
+import com.haraldsson.aidocbackend.user.model.CustomUser;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -19,11 +22,18 @@ public class QuestionController {
         this.aiService = aiService;
     }
 
-    @GetMapping("/ask")
-    public Mono<ResponseEntity<AiResponseDTO>> askQuestion(@RequestParam String question) {
+    @PostMapping("/ask")
+    public Mono<ResponseEntity<AiResponseDTO>> askQuestion(
+            @RequestBody AskQuestionRequestDTO request,
+            @AuthenticationPrincipal CustomUser user
+    ) {
 
-        return documentService.getAllText()
-                .flatMap(allText -> aiService.askQuestionAboutDocument(allText, question))
+        if (user == null) {
+            return Mono.just(ResponseEntity.status(401).build());
+        }
+
+        return documentService.getTextByUserId(user.getId())
+                .flatMap(allText -> aiService.askQuestionAboutDocument(allText, request.getQuestion()))
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                         .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
@@ -40,13 +50,4 @@ public class QuestionController {
                     .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                             .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
     }
-
-
-
-//    @GetMapping("/ai-test")
-//    public ResponseEntity<String> testAi() {
-//
-//            String result = aiService.testConnection();
-//            return ResponseEntity.ok(result);
-//    }
 }
