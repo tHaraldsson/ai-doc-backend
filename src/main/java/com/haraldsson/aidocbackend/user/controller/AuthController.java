@@ -97,7 +97,8 @@ public class AuthController {
                 .secure(true)  // Put true in production
                 .path("/")
                 .maxAge(0)
-                .sameSite("Strict")
+                .sameSite("None")
+                .domain("onrender.com")
                 .build();
 
         AuthResponseDTO response = new AuthResponseDTO("Logout successful", null);

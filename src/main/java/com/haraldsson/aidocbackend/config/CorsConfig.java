@@ -17,6 +17,7 @@ public class CorsConfig {
 
         config.setAllowedOriginPatterns(Arrays.asList(
                 "https://ai-doc-frontend-ouqn.onrender.com",
+                "https://ai-doc-backend-6faa.onrender.com",
                 "http://localhost:3000",
                 "http://localhost:5173"
         ));
