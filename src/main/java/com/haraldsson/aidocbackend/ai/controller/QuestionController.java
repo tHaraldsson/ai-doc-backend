@@ -50,5 +50,4 @@ public class QuestionController {
                     .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                             .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
     }
-
 }
