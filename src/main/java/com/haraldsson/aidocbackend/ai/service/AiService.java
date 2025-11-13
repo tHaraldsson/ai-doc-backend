@@ -82,7 +82,9 @@ public class AiService {
                 return Mono.just(new AiResponseDTO(content, model, tokens));
             }
 
-            return Mono.just(new AiResponseDTO("could not extract OpenAI answer", "unknown", 0));
+            return Mono.just(new AiResponseDTO("could not extract OpenAI answer",
+                    "unknown",
+                    0));
         } catch (Exception e) {
             System.err.println("Error when parsing OpenAI answer: " + e.getMessage());
             return Mono.just(new AiResponseDTO("Error when extracting AI answer: ", "error", 0));

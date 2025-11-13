@@ -1,21 +1,18 @@
 package com.haraldsson.aidocbackend.filemanagement.controller;
 
-import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponse;
+import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponseDTO;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.text.PDFTextStripper;
+import com.haraldsson.aidocbackend.user.model.CustomUser;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api")
@@ -27,59 +24,69 @@ public class FileUploadController {
         this.documentService = documentService;
     }
 
-    @PostMapping("/upload")
-    public Mono<ResponseEntity<UploadResponse>> uploadPdf(@RequestParam("file") MultipartFile file) {
+    @PostMapping(value = "/upload", consumes = "multipart/form-data")
+    public Mono<ResponseEntity<UploadResponseDTO>> uploadPdf(
+            @RequestPart("file") FilePart filePart,
+            @AuthenticationPrincipal CustomUser user) {
 
-        if (file.isEmpty()) {
-            return Mono.just(ResponseEntity.badRequest()
-                    .body(new UploadResponse("No file selected", null, null)));
+        if (user == null) {
+            System.out.println("User is NULL - returning 401");
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new UploadResponseDTO("Not Authenticated", null, null)));
         }
 
-        return Mono.fromCallable(() -> {
-                    try (PDDocument document = PDDocument.load(file.getInputStream(), (String) null)) {
-                        PDFTextStripper stripper = new PDFTextStripper();
-                        return stripper.getText(document);
-                    } catch (IOException e) {
-                        throw new RuntimeException("Error handling file", e);
-                    }
-                })
-                .flatMap(text -> {
-                    Document document = new Document(file.getOriginalFilename(), text);
-                    String preview = text.length() > 200 ? text.substring(0, 200) : text;
+        return documentService.processAndSavePdf(filePart, user)
+                .map(savedDoc -> {
+                    String preview = savedDoc.getContent().length() > 200
+                            ? savedDoc.getContent().substring(0, 200) + "..."
+                            : savedDoc.getContent();
 
-                    return documentService.save(document)
-                            .map(savedDoc -> ResponseEntity.ok(new UploadResponse(
-                                    "File uploaded and text extracted successfully",
-                                    file.getOriginalFilename(),
-                                    preview + "..."
-                            )));
+                    return ResponseEntity.ok(new UploadResponseDTO(
+                            "File uploaded successfully",
+                            savedDoc.getFileName(),
+                            preview
+                    ));
                 })
-                .onErrorResume(e -> Mono.just(ResponseEntity.status(500)
-                        .body(new UploadResponse("Error when handling file", null, null))));
+                .onErrorResume(e -> {
+                    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(new UploadResponseDTO("Upload failed: " + e.getMessage(), null, null)));
+                });
     }
 
 
     @DeleteMapping("/deletedocument/{id}")
-    public Mono<ResponseEntity<UploadResponse>> deleteDocument(@PathVariable("id") Long id) {
+    public Mono<ResponseEntity<UploadResponseDTO>> deleteDocument(@PathVariable("id") UUID id) {
 
         return documentService.deleteDocument(id)
-                .then(Mono.just(ResponseEntity.ok(new UploadResponse(
+                .then(Mono.just(ResponseEntity.ok(new UploadResponseDTO(
                         "Document with id: " + id + " deleted successfully",
                         null,
                         null
                 ))))
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
-                        .body(new UploadResponse("Error deleting document: " + e.getMessage(), null, null))));
+                        .body(new UploadResponseDTO("Error deleting document: " + e.getMessage(), null, null))));
     }
 
-        @GetMapping("/documents")
-        public Mono<ResponseEntity<Flux<Document>>> getAllDocuments() {
-            return Mono.just(ResponseEntity.ok(documentService.getAllDocuments()));
+    @GetMapping("/documents")
+    public Mono<ResponseEntity<Flux<Document>>> getUserDocuments(
+            @AuthenticationPrincipal CustomUser user
+    ) {
+        if (user == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
         }
 
+        return Mono.just(ResponseEntity.ok(documentService.getAllDocuments(user.getId())));
+    }
+
     @GetMapping("/textindb")
-    public Mono<ResponseEntity<String>> getTextInDb() {
-        return documentService.getAllText()
+    public Mono<ResponseEntity<String>> getUserText(
+            @AuthenticationPrincipal CustomUser user
+    ) {
+        if (user == null) {
+            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+        }
+
+        return documentService.getTextByUserId(user.getId())
                 .map(text -> ResponseEntity.ok(text))
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                         .body("Error: " + e.getMessage())));

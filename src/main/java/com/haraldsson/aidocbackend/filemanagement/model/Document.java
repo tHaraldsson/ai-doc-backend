@@ -4,12 +4,15 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 
 @Table("documents")
 public class Document {
 
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("file_name")
     private String fileName;
@@ -17,20 +20,26 @@ public class Document {
     @Column("content")
     private String content;
 
+    @Column("user_id")
+    private UUID userId;
+
+    @Column("created_at")
+    private LocalDateTime createdAt;
+
     public Document() {
     }
 
-    public Document(String fileName, String content) {
+    public Document(String fileName, String content, UUID userId) {
         this.fileName = fileName;
         this.content = content;
+        this.userId = userId;
+        this.createdAt = LocalDateTime.now();
     }
 
-    public Long getId() {
+
+
+    public UUID getId() {
         return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
     }
 
     public String getFileName() {
@@ -47,5 +56,21 @@ public class Document {
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }
