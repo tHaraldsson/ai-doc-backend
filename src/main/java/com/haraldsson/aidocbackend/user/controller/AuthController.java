@@ -57,10 +57,10 @@ public class AuthController {
 
                     ResponseCookie cookie = ResponseCookie.from("jwt", authResult.getToken())
                             .httpOnly(true)
-                            .secure(false)
+                            .secure(true)
                             .path("/")
                             .maxAge(Duration.ofHours(12))
-                            .sameSite("Strict")
+                            .sameSite("None")
                             .build();
 
                     AuthResponseDTO response = new AuthResponseDTO("Login successful", authResult.getUsername());
@@ -81,8 +81,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     public Mono<ResponseEntity<AuthResponseDTO>> logout(
-            @CookieValue(value = "jwt", required = false) String jwtToken,
-            @RequestHeader(value = "Authorization", required = false) String authHeader
+            @CookieValue(value = "jwt", required = false) String jwtToken
             ) {
 
         String username = "unknown";
@@ -97,8 +96,7 @@ public class AuthController {
                 .secure(true)  // Put true in production
                 .path("/")
                 .maxAge(0)
-                .sameSite("None")
-                .domain("onrender.com")
+                .sameSite("Strict")
                 .build();
 
         AuthResponseDTO response = new AuthResponseDTO("Logout successful", null);
