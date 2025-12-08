@@ -11,6 +11,7 @@ import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -46,7 +47,7 @@ public class AiService {
             requestBody.put("messages", new Object[]{
                     Map.of("role", "user", "content", question)
             });
-            requestBody.put("max_tokens", 1000);
+            requestBody.put("max_tokens", 3000);
             requestBody.put("temperature", 0.7);
 
             return webClient.post()
@@ -97,12 +98,29 @@ public class AiService {
         return askQuestion(prompt);
     }
 
+//    public Mono<AiResponseDTO> askQuestionAboutDocuments(List<String> documents, String question) {
+//        String combinedContext = combineDocuments(documents);
+//        String prompt = createMultiDocumentPrompt(combinedContext, question);
+//        return askQuestion(prompt);
+//    }
+
     private String createDocumentPrompt(String context, String question) {
-        String truncatedContext = truncateContext(context, 13000);
+        String truncatedContext = truncateContext(context, 30000);
         return String.format(
-                "Based on following document:\n\n\"%s\"\n\nAnswer this question in swedish: %s\n\nGive a short answer.",
-                truncatedContext, question
+                "Du får nu %d separata dokument. Svara på frågan baserat på dokumentens innehåll.\n\n" +
+                        "DOCUMENT START:\n" +
+                        "%s\n" +
+                        "DOCUMENT SLUT\n\n" +
+                        "Fråga: %s\n\n" +
+                        "Svara på svenska baserat enbart på ovanstående dokument.",
+                getDocumentCount(context), // antal dokument
+                truncatedContext,
+                question
         );
+    }
+
+    private int getDocumentCount(String context) {
+        return context.split("=== DOCUMENT \\d+ ===").length - 1;
     }
 
     private String truncateContext(String context, int maxLength) {
