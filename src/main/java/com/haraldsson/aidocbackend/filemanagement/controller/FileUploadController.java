@@ -2,6 +2,7 @@ package com.haraldsson.aidocbackend.filemanagement.controller;
 
 import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponseDTO;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
+import com.haraldsson.aidocbackend.filemanagement.model.DocumentChunk;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
 import org.springframework.http.HttpStatus;

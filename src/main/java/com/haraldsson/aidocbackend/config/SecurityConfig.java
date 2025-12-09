@@ -39,6 +39,7 @@ public class SecurityConfig {
                         .pathMatchers("/api/documents").hasRole("USER")
                         .pathMatchers("/api/textindb").hasRole("USER")
                         .pathMatchers("/api/ask").hasRole("USER")
+                        .pathMatchers("/api/debug-all-chunks").permitAll()
                         .pathMatchers("/").permitAll()
                         .anyExchange().authenticated()
                 )
