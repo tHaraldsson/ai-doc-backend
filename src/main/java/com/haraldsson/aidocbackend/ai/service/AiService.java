@@ -3,6 +3,7 @@ package com.haraldsson.aidocbackend.ai.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
+import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -13,6 +14,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class AiService {
@@ -20,8 +22,10 @@ public class AiService {
     private final String openaiToken;
     private final WebClient webClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final DocumentService documentService;
 
-    public AiService() {
+    public AiService(DocumentService documentService) {
+        this.documentService = documentService;
         this.openaiToken = System.getenv("OPENAI_API_TOKEN");
 
         if (openaiToken == null || openaiToken.isEmpty()) {
@@ -92,30 +96,38 @@ public class AiService {
         }
     }
 
-    public Mono<AiResponseDTO> askQuestionAboutDocument(String context, String question) {
+    public Mono<AiResponseDTO> askQuestionAboutDocument(String question, UUID userId) {
+        System.out.println("AI question with embeddings: " + question);
 
-        String prompt = createDocumentPrompt(context, question);
-        return askQuestion(prompt);
+        return documentService.findRelevantChunksWithEmbeddings(question, userId)
+                .flatMap(context -> {
+                    System.out.println("Context found: " + context.length() + " chars");
+
+                    if (context.contains("Inga dokument") || context.contains("Inga chunks")) {
+                        return askQuestion(question);
+                    }
+
+                    String prompt = createDocumentPrompt(context, question);
+                    return askQuestion(prompt);
+                })
+                .onErrorResume(e -> {
+                    System.err.println("Error in AI service: " + e.getMessage());
+                    return Mono.just(new AiResponseDTO(
+                            "Ett fel uppstod: " + e.getMessage(),
+                            "error",
+                            0
+                    ));
+                });
     }
 
-//    public Mono<AiResponseDTO> askQuestionAboutDocuments(List<String> documents, String question) {
-//        String combinedContext = combineDocuments(documents);
-//        String prompt = createMultiDocumentPrompt(combinedContext, question);
-//        return askQuestion(prompt);
-//    }
-
     private String createDocumentPrompt(String context, String question) {
-        String truncatedContext = truncateContext(context, 30000);
+        String truncatedContext = context.length() > 13000
+                ? context.substring(0, 13000) + "..."
+                : context;
+
         return String.format(
-                "Du får nu %d separata dokument. Svara på frågan baserat på dokumentens innehåll.\n\n" +
-                        "DOCUMENT START:\n" +
-                        "%s\n" +
-                        "DOCUMENT SLUT\n\n" +
-                        "Fråga: %s\n\n" +
-                        "Svara på svenska baserat enbart på ovanstående dokument.",
-                getDocumentCount(context), // antal dokument
-                truncatedContext,
-                question
+                "Based on following document parts:\n\n%s\n\nAnswer this question in Swedish: %s\n\nGive a detailed answer based only on the provided text.",
+                truncatedContext, question
         );
     }
 

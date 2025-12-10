@@ -22,7 +22,7 @@ public class QuestionController {
         this.aiService = aiService;
     }
 
-    @PostMapping("/ask")
+    @PostMapping("/ask") // with added embedding
     public Mono<ResponseEntity<AiResponseDTO>> askQuestion(
             @RequestBody AskQuestionRequestDTO request,
             @AuthenticationPrincipal CustomUser user
@@ -32,8 +32,7 @@ public class QuestionController {
             return Mono.just(ResponseEntity.status(401).build());
         }
 
-        return documentService.getTextByUserId(user.getId())
-                .flatMap(allText -> aiService.askQuestionAboutDocument(allText, request.getQuestion()))
+        return aiService.askQuestionAboutDocument(request.getQuestion(), user.getId())  // added embedding in question
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                         .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));
