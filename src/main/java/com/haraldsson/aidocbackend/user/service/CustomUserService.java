@@ -76,13 +76,5 @@ public class CustomUserService {
         return customUserRepository.existsByUsername(username);
     }
 
-//    public Mono<Boolean> validateToken(String token) {
-//        try {
-//            boolean isValid = jwtTokenProvider.validateToken(token);
-//            return Mono.just(isValid);
-//        } catch (Exception e) {
-//            return Mono.error(new RuntimeException("Invalid token"));
-//        }
-//    }
 
 }

@@ -26,7 +26,7 @@ public class FileUploadController {
     }
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
-    public Mono<ResponseEntity<UploadResponseDTO>> uploadPdf(
+    public Mono<ResponseEntity<UploadResponseDTO>> uploadFile(
             @RequestPart("file") FilePart filePart,
             @AuthenticationPrincipal CustomUser user) {
 
@@ -36,21 +36,43 @@ public class FileUploadController {
                     .body(new UploadResponseDTO("Not Authenticated", null, null)));
         }
 
-        return documentService.processAndSavePdf(filePart, user)
+        String filename = filePart.filename().toLowerCase();
+        if (!filename.endsWith(".pdf") &&
+                !filename.endsWith(".xlsx") &&
+                !filename.endsWith(".xls") &&
+                !filename.endsWith(".pptx") &&
+                !filename.endsWith(".ppt")) {
+            return Mono.just(ResponseEntity.badRequest()
+                    .body(new UploadResponseDTO(
+                            "Only PDF, Excel and POWERPOINT support",
+                            null, null)));
+        }
+
+        return documentService.processAndSaveFile(filePart, user)
                 .map(savedDoc -> {
                     String preview = savedDoc.getContent().length() > 200
                             ? savedDoc.getContent().substring(0, 200) + "..."
                             : savedDoc.getContent();
 
+                    String message;
+                    if (filename.endsWith(".pdf")) {
+                        message = "PDF-file uploaded";
+                    } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
+                        message = "Excel-file uploaded";
+                    } else {
+                        message = "PowerPoint-file uploaded";
+                    }
+
                     return ResponseEntity.ok(new UploadResponseDTO(
-                            "File uploaded successfully",
+                            message,
                             savedDoc.getFileName(),
                             preview
                     ));
                 })
                 .onErrorResume(e -> {
+                    String errorMsg = "Upload failed: " + e.getMessage();
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body(new UploadResponseDTO("Upload failed: " + e.getMessage(), null, null)));
+                            .body(new UploadResponseDTO(errorMsg, null, null)));
                 });
     }
 
