@@ -27,19 +27,23 @@ public class DocumentService {
     private final CustomUserService customUserService;
     private final DocumentChunkRepository documentChunkRepository;
     private final EmbeddingService embeddingService;
+    private final ExcelProcessorService excelProcessorService;
+    private final PowerPointProcessorService powerPointProcessorService;
 
     @Autowired
     public DocumentService(DocumentRepository documentRepository,
                            CustomUserService customUserService,
                            DocumentChunkRepository documentChunkRepository,
-                           EmbeddingService embeddingService) {
+                           EmbeddingService embeddingService, ExcelProcessorService excelProcessorService, PowerPointProcessorService powerPointProcessorService) {
         this.documentRepository = documentRepository;
         this.customUserService = customUserService;
         this.documentChunkRepository = documentChunkRepository;
         this.embeddingService = embeddingService;
+        this.excelProcessorService = excelProcessorService;
+        this.powerPointProcessorService = powerPointProcessorService;
     }
 
-    public Mono<Document> processAndSavePdf(FilePart filePart, CustomUser user) {
+    private Mono<Document> processAndSavePdf(FilePart filePart, CustomUser user) {
         return convertFilePartToBytes(filePart)
                 .flatMap(this::extractTextFromPdf)
                 .flatMap(text -> {
@@ -47,12 +51,40 @@ public class DocumentService {
 
                     return documentRepository.save(document)
                             .flatMap(savedDoc -> {
-                                return createAndSaveChunks(
-                                        savedDoc.getId(),
-                                        user.getId(),
-                                        filePart.filename(),
-                                        text
-                                ).thenReturn(savedDoc);
+                                return createPdfChunks(savedDoc.getId(), user.getId(),
+                                        filePart.filename(), text)
+                                        .thenReturn(savedDoc);
+                            });
+                });
+    }
+
+    public Mono<Document> processAndSaveFile(FilePart filePart, CustomUser user) {
+        String filename = filePart.filename().toLowerCase();
+
+        if (filename.endsWith(".pdf")) {
+            return processAndSavePdf(filePart, user);
+        } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
+            return processAndSaveExcel(filePart, user);
+        } else if (filename.endsWith(".pptx") || filename.endsWith(".ppt")) {
+            return processAndSavePowerPoint(filePart, user);
+        } else {
+            return Mono.error(new RuntimeException("Endast PDF, Excel och PowerPoint-filer stöds."));
+        }
+    }
+
+    public Mono<Document> processAndSavePowerPoint(FilePart filePart, CustomUser user) {
+        return convertFilePartToBytes(filePart)
+                .flatMap(bytes -> powerPointProcessorService.extractTextFromPowerPoint(bytes))
+                .flatMap(text -> {
+                    System.out.println("PowerPoint extraherad text: " + text.length() + " tecken");
+
+                    Document document = new Document(filePart.filename(), text, user.getId());
+
+                    return documentRepository.save(document)
+                            .flatMap(savedDoc -> {
+                                return createPowerPointChunks(savedDoc.getId(), user.getId(),
+                                        filePart.filename(), text)
+                                        .thenReturn(savedDoc);
                             });
                 });
     }
@@ -87,9 +119,74 @@ public class DocumentService {
         });
     }
 
+    public Mono<Document> processAndSaveExcel(FilePart filePart, CustomUser user) {
+        return convertFilePartToBytes(filePart)
+                .flatMap(bytes -> excelProcessorService.extractTextFromExcel(bytes))
+                .flatMap(text -> {
+                    System.out.println("Excel extraherad text: " + text.length() + " tecken");
+
+                    Document document = new Document(filePart.filename(), text, user.getId());
+
+                    return documentRepository.save(document)
+                            .flatMap(savedDoc -> {
+                                return createExcelChunks(savedDoc.getId(), user.getId(),
+                                        filePart.filename(), text)
+                                        .thenReturn(savedDoc);
+                            });
+                });
+    }
+
     private Mono<Document> createAndSaveDocument(String filename, String content, UUID id) {
         Document document = new Document(filename, content, id);
         return documentRepository.save(document);
+    }
+
+    private Mono<Void> createPowerPointChunks(UUID documentId, UUID userId,
+                                              String filename, String powerpointText) {
+        System.out.println("=== CREATING POWERPOINT-CHUNKS ===");
+
+        String[] slides = powerpointText.split("--- SLIDE ");
+
+        return Flux.range(1, slides.length - 1)
+                .flatMap(i -> {
+                    String slideText = slides[i].trim();
+                    if (slideText.isEmpty()) return Mono.empty();
+
+                    String fullSlideText = "--- SLIDE " + slideText;
+
+                    System.out.println("Processing PowerPoint-slide " + i + " (" +
+                            fullSlideText.length() + " tecken)");
+
+                    DocumentChunk chunk = new DocumentChunk();
+                    chunk.setDocumentId(documentId);
+                    chunk.setUserId(userId);
+                    chunk.setFilename(filename);
+                    chunk.setContent(fullSlideText);
+                    chunk.setChunkNumber(i);
+                    chunk.setStartIndex(0);
+                    chunk.setEndIndex(fullSlideText.length());
+
+                    return documentChunkRepository.save(chunk)
+                            .flatMap(savedChunk -> {
+                                System.out.println("Saved PowerPoint-chunk for slide " + i);
+
+                                return embeddingService.createEmbedding(fullSlideText)
+                                        .flatMap(embedding -> {
+                                            if (embedding != null && embedding.length > 0) {
+                                                savedChunk.setEmbedding(embedding);
+                                                return documentChunkRepository.save(savedChunk);
+                                            }
+                                            return Mono.just(savedChunk);
+                                        })
+                                        .onErrorResume(e -> {
+                                            System.err.println("Embedding failed: " + e.getMessage());
+                                            return Mono.just(savedChunk);
+                                        });
+                            });
+                })
+                .then()
+                .doOnSuccess(v -> System.out.println("ALL POWER-POINT CHUNKS SAVED"))
+                .doOnError(e -> System.err.println("POWERPOINT-CHUNKING FAILED: " + e.getMessage()));
     }
 
     public Mono<String> getTextByUserId(UUID userId) {
@@ -208,7 +305,7 @@ public class DocumentService {
                                 scoredChunks.sort((a, b) -> Float.compare(b.similarity, a.similarity));
 
                                 StringBuilder relevantText = new StringBuilder();
-                                relevantText.append("🔍 Sökte med embeddings - hittade ").append(scoredChunks.size())
+                                relevantText.append("Sökte med embeddings - hittade ").append(scoredChunks.size())
                                         .append(" chunks med embeddings\n\n");
 
                                 int chunksToTake = Math.min(5, scoredChunks.size());
@@ -263,31 +360,62 @@ public class DocumentService {
         }
     }
 
-    public Mono<String> debugChunking(UUID documentId) {
-        return getChunksByDocumentId(documentId)
-                .collectList()
-                .map(chunks -> {
-                    StringBuilder debug = new StringBuilder();
-                    debug.append("Total chunks: ").append(chunks.size()).append("\n\n");
+    private Mono<Void> createExcelChunks(UUID documentId, UUID userId,
+                                         String filename, String excelText) {
+        System.out.println("=== SKAPAR EXCEL-CHUNKS ===");
 
-                    for (DocumentChunk chunk : chunks) {
-                        debug.append("Chunk #").append(chunk.getChunkNumber())
-                                .append(" (tecken ").append(chunk.getStartIndex())
-                                .append("-").append(chunk.getEndIndex()).append("):\n")
-                                .append(chunk.getContent().length() > 100 ?
-                                        chunk.getContent().substring(0, 100) + "..." :
-                                        chunk.getContent())
-                                .append("\n\n");
-                    }
+        String[] worksheets = excelText.split("--- WORKSHEET: ");
 
-                    return debug.toString();
+        return Flux.range(1, worksheets.length - 1)
+                .flatMap(i -> {
+                    String worksheetText = worksheets[i].trim();
+                    if (worksheetText.isEmpty()) return Mono.empty();
+
+                    String fullWorksheetText = "--- WORKSHEET: " + worksheetText;
+
+                    System.out.println("Bearbetar Excel-ark " + i + " (" +
+                            fullWorksheetText.length() + " tecken)");
+
+                    DocumentChunk chunk = new DocumentChunk();
+                    chunk.setDocumentId(documentId);
+                    chunk.setUserId(userId);
+                    chunk.setFilename(filename);
+                    chunk.setContent(fullWorksheetText);
+                    chunk.setChunkNumber(i);
+                    chunk.setStartIndex(0);
+                    chunk.setEndIndex(fullWorksheetText.length());
+
+                    return documentChunkRepository.save(chunk)
+                            .flatMap(savedChunk -> {
+                                System.out.println("Sparat Excel-chunk för ark " + i);
+
+                                return embeddingService.createEmbedding(fullWorksheetText)
+                                        .flatMap(embedding -> {
+                                            if (embedding != null && embedding.length > 0) {
+                                                savedChunk.setEmbedding(embedding);
+                                                return documentChunkRepository.save(savedChunk);
+                                            }
+                                            return Mono.just(savedChunk);
+                                        })
+                                        .onErrorResume(e -> {
+                                            System.err.println("Embedding misslyckades: " + e.getMessage());
+                                            return Mono.just(savedChunk);
+                                        });
+                            });
                 })
-                .defaultIfEmpty("Inga chunks hittades för detta dokument");
+                .then()
+                .doOnSuccess(v -> System.out.println("ALLA EXCEL-CHUNKS SPARADE"))
+                .doOnError(e -> System.err.println("EXCEL-CHUNKING MISSLYCKADES: " + e.getMessage()));
     }
 
 
-        private Mono<Void> createAndSaveChunks(UUID documentId, UUID userId,
+        private Mono<Void> createPdfChunks(UUID documentId, UUID userId,
                                                String filename, String fullText) {
+
+            if (filename.toLowerCase().endsWith(".xlsx") ||
+                    filename.toLowerCase().endsWith(".xls")) {
+                return Mono.empty();
+            }
 
             System.out.println("=== START CHUNKING WITH EMBEDDINGS ===");
             System.out.println("Document ID: " + documentId);
