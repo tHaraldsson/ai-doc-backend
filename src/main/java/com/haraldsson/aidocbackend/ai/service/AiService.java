@@ -103,7 +103,7 @@ public class AiService {
                 .flatMap(context -> {
                     System.out.println("Context found: " + context.length() + " chars");
 
-                    if (context.contains("Inga dokument") || context.contains("Inga chunks")) {
+                    if (context.contains("No document") || context.contains("No chunks")) {
                         return askQuestion(question);
                     }
 
@@ -113,7 +113,7 @@ public class AiService {
                 .onErrorResume(e -> {
                     System.err.println("Error in AI service: " + e.getMessage());
                     return Mono.just(new AiResponseDTO(
-                            "Ett fel uppstod: " + e.getMessage(),
+                            "An error occurred: " + e.getMessage(),
                             "error",
                             0
                     ));
@@ -126,7 +126,7 @@ public class AiService {
                 : context;
 
         return String.format(
-                "Based on following document parts:\n\n%s\n\nAnswer this question in Swedish: %s\n\nGive a detailed answer based only on the provided text.",
+                "Based on following document parts:\n\n%s\n\nAnswer this question in the same language as the question: %s\n\nGive a detailed answer based only on the provided text.",
                 truncatedContext, question
         );
     }

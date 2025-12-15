@@ -22,7 +22,7 @@ public class QuestionController {
         this.aiService = aiService;
     }
 
-    @PostMapping("/ask") // with added embedding
+    @PostMapping("/ask")
     public Mono<ResponseEntity<AiResponseDTO>> askQuestion(
             @RequestBody AskQuestionRequestDTO request,
             @AuthenticationPrincipal CustomUser user
