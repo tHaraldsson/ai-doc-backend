@@ -4,6 +4,7 @@ import com.haraldsson.aidocbackend.advice.dto.SimpleErrorResponse;
 import com.haraldsson.aidocbackend.advice.exceptions.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -178,5 +179,37 @@ public class GlobalExceptionHandler {
         return Mono.just(ResponseEntity.status(500)
                 .contentType(MediaType.TEXT_PLAIN)
                 .body("Internal server error"));
+    }
+
+    @ExceptionHandler(DataAccessResourceFailureException.class)
+    public Mono<ResponseEntity<SimpleErrorResponse>> handleDatabaseConnectionError(
+            DataAccessResourceFailureException ex) {
+
+        log.error("Database connection failed: {}", ex.getMessage());
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                "DATABASE_CONNECTION_ERROR",
+                "Database connection lost. Please try again.");
+
+        return Mono.just(ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(errorResponse));
+    }
+
+    // hantering för R2DBC specifika fel
+    @ExceptionHandler(org.springframework.r2dbc.UncategorizedR2dbcException.class)
+    public Mono<ResponseEntity<SimpleErrorResponse>> handleR2dbcException(
+            org.springframework.r2dbc.UncategorizedR2dbcException ex) {
+
+        log.error("R2DBC error occurred: {}", ex.getMessage());
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                "DATABASE_ERROR",
+                "Database operation failed. Please try again later."
+        );
+
+        return Mono.just(ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse));
     }
 }

@@ -96,7 +96,7 @@ public class AuthController {
                 .secure(true)
                 .path("/")
                 .maxAge(0)
-                .sameSite("Strict")
+                .sameSite("None")
                 .build();
 
         AuthResponseDTO response = new AuthResponseDTO("Logout successful", null);
