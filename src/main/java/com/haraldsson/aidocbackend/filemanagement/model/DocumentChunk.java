@@ -48,34 +48,78 @@ public class DocumentChunk {
         this.endIndex = endIndex;
     }
 
-    public UUID getId() { return id; }
-    public void setId(UUID id) { this.id = id; }
+    public UUID getId() {
+        return id;
+    }
 
-    public UUID getDocumentId() { return documentId; }
-    public void setDocumentId(UUID documentId) { this.documentId = documentId; }
+    public void setId(UUID id) {
+        this.id = id;
+    }
 
-    public UUID getUserId() { return userId; }
-    public void setUserId(UUID userId) { this.userId = userId; }
+    public UUID getDocumentId() {
+        return documentId;
+    }
 
-    public String getFilename() { return filename; }
-    public void setFilename(String filename) { this.filename = filename; }
+    public void setDocumentId(UUID documentId) {
+        this.documentId = documentId;
+    }
 
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
+    public UUID getUserId() {
+        return userId;
+    }
 
-    public int getChunkNumber() { return chunkNumber; }
-    public void setChunkNumber(int chunkNumber) { this.chunkNumber = chunkNumber; }
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
 
-    public int getStartIndex() { return startIndex; }
-    public void setStartIndex(int startIndex) { this.startIndex = startIndex; }
+    public String getFilename() {
+        return filename;
+    }
 
-    public int getEndIndex() { return endIndex; }
-    public void setEndIndex(int endIndex) { this.endIndex = endIndex; }
+    public void setFilename(String filename) {
+        this.filename = filename;
+    }
 
-    public String getEmbeddingJson() { return embeddingJson; }
-    public void setEmbeddingJson(String embeddingJson) { this.embeddingJson = embeddingJson; }
+    public String getContent() {
+        return content;
+    }
 
-    // Hjälpmetoder
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public int getChunkNumber() {
+        return chunkNumber;
+    }
+
+    public void setChunkNumber(int chunkNumber) {
+        this.chunkNumber = chunkNumber;
+    }
+
+    public int getStartIndex() {
+        return startIndex;
+    }
+
+    public void setStartIndex(int startIndex) {
+        this.startIndex = startIndex;
+    }
+
+    public int getEndIndex() {
+        return endIndex;
+    }
+
+    public void setEndIndex(int endIndex) {
+        this.endIndex = endIndex;
+    }
+
+    public String getEmbeddingJson() {
+        return embeddingJson;
+    }
+
+    public void setEmbeddingJson(String embeddingJson) {
+        this.embeddingJson = embeddingJson;
+    }
+
     public float[] getEmbedding() {
         if (embeddingJson == null || embeddingJson.isEmpty()) {
             return null;

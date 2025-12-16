@@ -1,5 +1,6 @@
 package com.haraldsson.aidocbackend.ai.controller;
 
+import com.haraldsson.aidocbackend.advice.exceptions.ValidationException;
 import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
 import com.haraldsson.aidocbackend.ai.dto.AskQuestionRequestDTO;
 import com.haraldsson.aidocbackend.ai.service.AiService;
@@ -22,17 +23,22 @@ public class QuestionController {
         this.aiService = aiService;
     }
 
-    @PostMapping("/ask") // with added embedding
+    @PostMapping("/ask")
     public Mono<ResponseEntity<AiResponseDTO>> askQuestion(
-            @RequestBody AskQuestionRequestDTO request,
+            @RequestBody(required = false) AskQuestionRequestDTO request,
             @AuthenticationPrincipal CustomUser user
     ) {
 
-        if (user == null) {
-            return Mono.just(ResponseEntity.status(401).build());
+        if (request == null) {
+            return Mono.just(ResponseEntity.ok().build());
         }
 
-        return aiService.askQuestionAboutDocument(request.getQuestion(), user.getId())  // added embedding in question
+        if (request.getQuestion() == null || request.getQuestion().trim().isEmpty()) {
+            return Mono.error(new ValidationException("Question is required"));
+        }
+
+
+        return aiService.askQuestionAboutDocument(request.getQuestion(), user.getId())
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
                         .body(new AiResponseDTO("Error: " + e.getMessage(), "error", 0))));

@@ -12,7 +12,6 @@ import java.util.Date;
 @Component
 public class JwtTokenProvider {
 
-    // TODO - change to base64EncodeSecretKey
     @Value("${jwt.secret}")
     private String jwtSecret;
 

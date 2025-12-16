@@ -2,6 +2,9 @@ package com.haraldsson.aidocbackend.filemanagement.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.netty.handler.timeout.ReadTimeoutException;
+import io.netty.handler.timeout.ReadTimeoutHandler;
+import io.netty.handler.timeout.WriteTimeoutHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -31,14 +34,17 @@ public class EmbeddingService {
             logger.info("EmbeddingService initialized with token present (length: {})", token.length());
         }
 
+        HttpClient httpClient = HttpClient.create()
+                .responseTimeout(Duration.ofSeconds(60))
+                .doOnConnected(conn ->
+                        conn.addHandlerLast(new ReadTimeoutHandler(60))
+                                .addHandlerLast(new WriteTimeoutHandler(60)));
+
         this.webClient = WebClient.builder()
                 .baseUrl("https://api.openai.com/v1")
                 .defaultHeader("Authorization", "Bearer " + token)
                 .defaultHeader("Content-Type", "application/json")
-                .clientConnector(new ReactorClientHttpConnector(
-                        HttpClient.create()
-                                .responseTimeout(Duration.ofSeconds(30))
-                ))
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .build();
     }
 
@@ -48,6 +54,7 @@ public class EmbeddingService {
             return Mono.empty();
         }
 
+        // Trunkerar texten om den är för lång
         String truncatedText = text.length() > 8000
                 ? text.substring(0, 8000)
                 : text;
@@ -64,16 +71,18 @@ public class EmbeddingService {
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(45))  // Timeout per request
                 .flatMap(this::parseEmbeddingResponse)
-                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1)))
+                .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
+                        .filter(e -> e instanceof ReadTimeoutException))
                 .doOnSuccess(embedding -> {
                     logger.info("Embedding created successfully: {} dimensions", embedding.length);
                 })
                 .doOnError(e -> {
-                    logger.error("Error creating embedding", e);
+                    logger.error("Error creating embedding after retries: {}", e.getMessage());
                 })
                 .onErrorResume(e -> {
-                    logger.warn("Falling back to empty embedding due to error", e);
+                    logger.warn("Falling back to empty embedding due to error: {}", e.getMessage());
                     return Mono.empty();
                 });
     }
