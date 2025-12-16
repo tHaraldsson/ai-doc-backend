@@ -1,0 +1,182 @@
+package com.haraldsson.aidocbackend.advice;
+
+import com.haraldsson.aidocbackend.advice.dto.SimpleErrorResponse;
+import com.haraldsson.aidocbackend.advice.exceptions.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.ServerWebInputException;
+import reactor.core.publisher.Mono;
+
+import java.util.stream.Collectors;
+
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<SimpleErrorResponse> handleUnauthorizedException(
+            UnauthorizedException ex) {
+
+        log.warn("Unauthorized access attempt: {}", ex.getMessage());
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(FileProcessingException.class)
+    public ResponseEntity<SimpleErrorResponse> handleFileProcessingException(
+            FileProcessingException ex, ServerWebExchange exchange) {
+
+        log.error("File processing error: {}", ex.getMessage(), ex);
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<SimpleErrorResponse> handleResourceNotFoundException(
+            ResourceNotFoundException ex, ServerWebExchange exchange) {
+
+        log.warn("Resource not found: {}", ex.getMessage());
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(ValidationException.class)
+    public ResponseEntity<SimpleErrorResponse> handleValidationException(
+            ValidationException ex, ServerWebExchange exchange) {
+
+        log.warn("Validation error: {}", ex.getMessage());
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(WebExchangeBindException.class)
+    public ResponseEntity<SimpleErrorResponse> handleWebExchangeBindException(
+            WebExchangeBindException ex, ServerWebExchange exchange) {
+
+        String errorDetails = ex.getFieldErrors().stream()
+                .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                .collect(Collectors.joining(", "));
+
+        log.warn("Request validation failed: {}", errorDetails);
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                "REQUEST_VALIDATION_ERROR",
+                "Invalid request parameters: " + errorDetails
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<SimpleErrorResponse> handleAccessDeniedException(
+            AccessDeniedException ex, ServerWebExchange exchange) {
+
+        log.warn("Access denied: {}", ex.getMessage());
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                "ACCESS_DENIED",
+                "You don't have permission to access this resource"
+        );
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<SimpleErrorResponse> handleBusinessException(
+            BusinessException ex, ServerWebExchange exchange) {
+
+        log.error("Business error: {}", ex.getMessage(), ex);
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                ex.getErrorCode(),
+                ex.getMessage()
+        );
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<SimpleErrorResponse> handleGenericException(
+            Exception ex, ServerWebExchange exchange) {
+
+        log.error("Unhandled exception occurred: {}", ex.getMessage(), ex);
+
+        SimpleErrorResponse errorResponse = new SimpleErrorResponse(
+                "INTERNAL_SERVER_ERROR",
+                "An unexpected error occurred"
+        );
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(errorResponse);
+    }
+
+    @ExceptionHandler(ServerWebInputException.class)
+    public ResponseEntity<SimpleErrorResponse> handleServerWebInputException(
+            ServerWebInputException ex, ServerWebExchange exchange) {
+
+        log.warn("Invalid request input: {}", ex.getMessage());
+
+        if (ex.getMessage() != null && ex.getMessage().contains("No request body")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new SimpleErrorResponse(
+                            "MISSING_REQUEST_BODY",
+                            "Request body is required"
+                    ));
+        }
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new SimpleErrorResponse(
+                        "INVALID_REQUEST",
+                        "Invalid request: " + ex.getReason()
+                ));
+    }
+
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    public Mono<ResponseEntity<String>> handleHttpMessageNotWritableException(
+            HttpMessageNotWritableException ex, ServerWebExchange exchange) {
+
+        log.error("HTTP message not writable: {}", ex.getMessage());
+
+        // returnera en vanlig sträng istället för ett JSON-objekt
+        return Mono.just(ResponseEntity.status(500)
+                .contentType(MediaType.TEXT_PLAIN)
+                .body("Internal server error"));
+    }
+}
