@@ -8,7 +8,7 @@ import reactor.core.publisher.Mono;
 @RestController
 public class HealthController {
 
-    @GetMapping("/health")
+    @GetMapping("/")
     public Mono<ResponseEntity<String>> apiHealth() {
         return Mono.just(ResponseEntity.ok("OK"));
     }
