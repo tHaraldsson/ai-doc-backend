@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.haraldsson.aidocbackend.ai.dto.AiResponseDTO;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -19,6 +21,8 @@ import java.util.UUID;
 @Service
 public class AiService {
 
+    private final Logger log = LoggerFactory.getLogger(AiService.class);
+
     private final String openaiToken;
     private final WebClient webClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -29,7 +33,10 @@ public class AiService {
         this.openaiToken = System.getenv("OPENAI_API_TOKEN");
 
         if (openaiToken == null || openaiToken.isEmpty()) {
-            System.err.println("WARNING: OPENAI_API_TOKEN environment variable is not set!");
+            log.warn("OPENAI_API_TOKEN environment variable is not set!");
+        } else {
+            log.info("AI Service initialized with OpenAI token (length: {})",
+                    openaiToken.length());
         }
 
         this.webClient = WebClient.builder()
@@ -41,38 +48,63 @@ public class AiService {
                                 .responseTimeout(Duration.ofSeconds(60))
                 ))
                 .build();
+
+        log.debug("WebClient initialized for OpenAI API");
     }
 
 
     public Mono<AiResponseDTO> askQuestion(String question) {
+        log.debug("Sending question to OpenAI: {}", truncateQuestion(question));
 
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("model", "gpt-3.5-turbo");
-            requestBody.put("messages", new Object[]{
-                    Map.of("role", "user", "content", question)
-            });
-            requestBody.put("max_tokens", 3000);
-            requestBody.put("temperature", 0.7);
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("model", "gpt-3.5-turbo");
+        requestBody.put("messages", new Object[]{
+                Map.of("role", "user", "content", question)
+        });
+        requestBody.put("max_tokens", 3000);
+        requestBody.put("temperature", 0.7);
 
-            return webClient.post()
-                    .uri("/chat/completions")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .flatMap(this::parseOpenAiResponse)
-                    .onErrorResume(e -> Mono.just(new AiResponseDTO(
-                            "Could not communicate with OpenAI: " + e.getMessage(),
+        return webClient.post()
+                .uri("/chat/completions")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(String.class)
+                .doOnSuccess(response -> log.debug("OpenAI response received"))
+                .doOnError(error -> log.error("OpenAI API error: {}", error.getMessage()))
+                .flatMap(this::parseOpenAiResponse)
+                .onErrorResume(e -> {
+                    log.error("Failed to communicate with OpenAI: {}", e.getMessage());
+                    return Mono.just(new AiResponseDTO(
+                            "Could not communicate with AI service. Please try again.",
                             "error",
                             0
-                    )));
+                    ));
+                })
+                .doOnSuccess(response -> {
+                    if ("error".equals(response.model())) {
+                        log.warn("AI response indicates error: {}", response.answer());
+                    } else {
+                        log.info("AI question processed successfully, tokens used: {}",
+                                response.tokens());
+                    }
+                });
     }
-
 
 
     private Mono<AiResponseDTO> parseOpenAiResponse(String jsonresponse) {
         try {
             JsonNode root = objectMapper.readTree(jsonresponse);
             JsonNode choices = root.get("choices");
+
+            if (choices == null || !choices.isArray() || choices.isEmpty()) {
+                log.error("Invalid OpenAI response - no choices found");
+                return Mono.just(new AiResponseDTO(
+                        "Invalid response from AI service",
+                        "unknown",
+                        0
+                ));
+            }
+
             JsonNode firstChoice = choices.get(0);
             JsonNode message = firstChoice.get("message");
 
@@ -82,64 +114,94 @@ public class AiService {
                 JsonNode usage = root.get("usage");
                 int tokens = usage != null ? usage.get("total_tokens").asInt() : 0;
 
-                System.out.println("OpenAI answer: " + content);
+                log.debug("OpenAI answer parsed successfully, model: {}, tokens: {}",
+                        model, tokens);
 
                 return Mono.just(new AiResponseDTO(content, model, tokens));
             }
 
+            log.error("Could not extract content from OpenAI response");
             return Mono.just(new AiResponseDTO("could not extract OpenAI answer",
                     "unknown",
-                    0));
+                    0
+            ));
+
         } catch (Exception e) {
-            System.err.println("Error when parsing OpenAI answer: " + e.getMessage());
+            log.error("Error parsing OpenAI response: {}", e.getMessage());
             return Mono.just(new AiResponseDTO("Error when extracting AI answer: ", "error", 0));
         }
     }
 
     public Mono<AiResponseDTO> askQuestionAboutDocument(String question, UUID userId) {
-        System.out.println("AI question with embeddings: " + question);
+        log.info("AI question about documents from user {}: {}",
+                maskUserId(userId), truncateQuestion(question));
 
         return documentService.findRelevantChunksWithEmbeddings(question, userId)
+                .doOnSuccess(context ->
+                        log.debug("Context found for question: {} chars",
+                                context.length()))
                 .flatMap(context -> {
-                    System.out.println("Context found: " + context.length() + " chars");
+                    log.info("No relevant documents found for question");
 
                     if (context.contains("No document") || context.contains("No chunks")) {
+                        log.info("No relevant documents found for question");
                         return askQuestion(question);
                     }
 
                     String prompt = createDocumentPrompt(context, question);
+                    log.debug("Created prompt with context length: {}", prompt.length());
+
                     return askQuestion(prompt);
                 })
                 .onErrorResume(e -> {
-                    System.err.println("Error in AI service: " + e.getMessage());
+                    log.error("Error in AI service for user {}: {}",
+                            maskUserId(userId), e.getMessage(), e);
                     return Mono.just(new AiResponseDTO(
                             "An error occurred: " + e.getMessage(),
                             "error",
                             0
                     ));
+                })
+                .doOnSuccess(response -> {
+                    if (!"error".equals(response.model())) {
+                        log.info("Document question answered successfully for user {}, tokens: {}",
+                                maskUserId(userId), response.tokens());
+                    }
                 });
     }
 
     private String createDocumentPrompt(String context, String question) {
-        String truncatedContext = context.length() > 13000
-                ? context.substring(0, 13000) + "..."
-                : context;
+        int maxContextLength = 13000;
+        String truncatedContext;
 
-        return String.format(
+        if (context.length() > maxContextLength) {
+            log.debug("Truncating context from {} to {} characters",
+                    context.length(), maxContextLength);
+            truncatedContext = context.substring(0, maxContextLength) + "...";
+        } else {
+            truncatedContext = context;
+        }
+
+        String prompt = String.format(
                 "Based on following document parts:\n\n%s\n\nAnswer this question in the same language as the question: %s\n\nGive a detailed answer based only on the provided text.",
                 truncatedContext, question
         );
+
+        log.debug("Created prompt with total length: {}", prompt.length());
+        return prompt;
     }
 
-    private int getDocumentCount(String context) {
-        return context.split("=== DOCUMENT \\d+ ===").length - 1;
+    // hjälpmetod för dölja userid
+    private String maskUserId(UUID userId) {
+        if (userId == null) return "null";
+        String idStr = userId.toString();
+        return idStr.substring(0, Math.min(8, idStr.length())) + "***";
     }
 
-    private String truncateContext(String context, int maxLength) {
-        if (context.length() <= maxLength) {
-            return context;
-        }
-        return context.substring(0, maxLength) + "...";
+    private String truncateQuestion(String question) {
+        if (question == null) return "null";
+        if (question.length() <= 100) return question;
+        return question.substring(0, 100) + "...";
     }
 
 }

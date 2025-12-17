@@ -2,6 +2,8 @@ package com.haraldsson.aidocbackend.config;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +13,8 @@ import java.util.Date;
 
 @Component
 public class JwtTokenProvider {
+
+    private final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -23,7 +27,7 @@ public class JwtTokenProvider {
         try {
 
             if (jwtSecret == null || jwtSecret.length() < 32) {
-                System.out.println("JWT secret is too short, generating secure key...");
+                log.warn("Jwt secret is too short, generating secure key...");
                 return Keys.secretKeyFor(SignatureAlgorithm.HS256);
 
             }
@@ -31,7 +35,8 @@ public class JwtTokenProvider {
             byte[] decodedKey = Base64.getDecoder().decode(base64Key);
             return Keys.hmacShaKeyFor(decodedKey);
         } catch (Exception e) {
-            System.err.println("error creating JWT signing key: " + e.getMessage());
+            log.warn("error creating JWT signing key: {}", e.getMessage());
+
             return Keys.secretKeyFor(SignatureAlgorithm.HS256);
         }
     }
@@ -47,7 +52,7 @@ public class JwtTokenProvider {
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
                 .compact();
-        System.out.println("JWT Token generated successfully for user: " + username);
+        log.info("JWT Token generated successfully for user: {}", username);
         return token;
     }
 
@@ -61,7 +66,8 @@ public class JwtTokenProvider {
                     .getPayload();
             return claims.getSubject();
         } catch (Exception e) {
-            System.err.println("error getting username from token: " + e.getMessage());
+            log.warn("error getting username from token: {}", e.getMessage());
+
             throw new RuntimeException("Invalid JWT token" + e);
         }
     }
@@ -73,9 +79,10 @@ public class JwtTokenProvider {
                     .verifyWith(getSigningKey())
                     .build()
                     .parseSignedClaims(token);
+            log.debug("JWT token validation successful");
             return true;
         } catch (Exception e) {
-            System.err.println("JWT Validation error: " + e.getMessage());
+            log.warn("JWT Validation failed: {}", e.getMessage());
             return false;
         }
     }

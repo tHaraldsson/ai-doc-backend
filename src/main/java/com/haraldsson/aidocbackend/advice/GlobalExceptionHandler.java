@@ -88,11 +88,20 @@ public class GlobalExceptionHandler {
     public ResponseEntity<SimpleErrorResponse> handleWebExchangeBindException(
             WebExchangeBindException ex, ServerWebExchange exchange) {
 
+        if (log.isDebugEnabled()) {
+            String errorDetails = ex.getFieldErrors().stream()
+                    .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
+                    .collect(Collectors.joining(", "));
+            log.debug("Request validation failed: {}", errorDetails);
+        } else {
+            log.warn("Request validation failed for {} {}",
+                    exchange.getRequest().getMethod(),
+                    exchange.getRequest().getPath());
+        }
+
         String errorDetails = ex.getFieldErrors().stream()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
                 .collect(Collectors.joining(", "));
-
-        log.warn("Request validation failed: {}", errorDetails);
 
         SimpleErrorResponse errorResponse = new SimpleErrorResponse(
                 "REQUEST_VALIDATION_ERROR",
