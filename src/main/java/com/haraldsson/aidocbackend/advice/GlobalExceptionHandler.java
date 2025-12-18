@@ -4,6 +4,8 @@ import com.haraldsson.aidocbackend.advice.dto.SimpleErrorResponse;
 import com.haraldsson.aidocbackend.advice.exceptions.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -20,6 +22,7 @@ import reactor.core.publisher.Mono;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
@@ -184,17 +187,23 @@ public class GlobalExceptionHandler {
 
         log.error("HTTP message not writable: {}", ex.getMessage());
 
-        // returnera en vanlig sträng istället för ett JSON-objekt
         return Mono.just(ResponseEntity.status(500)
                 .contentType(MediaType.TEXT_PLAIN)
                 .body("Internal server error"));
     }
 
     @ExceptionHandler(DataAccessResourceFailureException.class)
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     public Mono<ResponseEntity<SimpleErrorResponse>> handleDatabaseConnectionError(
-            DataAccessResourceFailureException ex) {
+            DataAccessResourceFailureException ex, ServerWebExchange exchange) {
 
         log.error("Database connection failed: {}", ex.getMessage());
+
+
+        if (exchange.getResponse().isCommitted()) {
+            log.debug("Response already committed, skipping database error response");
+            return Mono.empty();
+        }
 
         SimpleErrorResponse errorResponse = new SimpleErrorResponse(
                 "DATABASE_CONNECTION_ERROR",
@@ -202,15 +211,23 @@ public class GlobalExceptionHandler {
 
         return Mono.just(ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(errorResponse));
     }
 
-    // hantering för R2DBC specifika fel
+
+
     @ExceptionHandler(org.springframework.r2dbc.UncategorizedR2dbcException.class)
     public Mono<ResponseEntity<SimpleErrorResponse>> handleR2dbcException(
-            org.springframework.r2dbc.UncategorizedR2dbcException ex) {
+            org.springframework.r2dbc.UncategorizedR2dbcException ex,
+            ServerWebExchange exchange) {
 
         log.error("R2DBC error occurred: {}", ex.getMessage());
+
+        if (exchange.getResponse().isCommitted()) {
+            log.debug("Response already committed, skipping R2DBC error response");
+            return Mono.empty();
+        }
 
         SimpleErrorResponse errorResponse = new SimpleErrorResponse(
                 "DATABASE_ERROR",
@@ -219,6 +236,7 @@ public class GlobalExceptionHandler {
 
         return Mono.just(ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(errorResponse));
     }
 }
