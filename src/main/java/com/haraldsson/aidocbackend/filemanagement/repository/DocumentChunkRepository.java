@@ -5,6 +5,7 @@ import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
 import java.util.UUID;
 
 public interface DocumentChunkRepository extends ReactiveCrudRepository<DocumentChunk, UUID> {
@@ -20,6 +21,7 @@ public interface DocumentChunkRepository extends ReactiveCrudRepository<Document
 
     @Query("DELETE FROM document_chunks WHERE document_id = :documentId")
     Mono<Void> deleteByDocumentId(UUID documentId);
+
 
     @Query("SELECT DISTINCT filename FROM document_chunks WHERE user_id = :userId")
     Flux<String> findDistinctFilenamesByUserId(UUID userId);

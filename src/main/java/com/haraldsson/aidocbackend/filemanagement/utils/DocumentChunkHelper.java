@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class DocumentChunkHelper {
 
-    private static final Logger logger = LoggerFactory.getLogger(DocumentChunkHelper.class);
+    private static final Logger log = LoggerFactory.getLogger(DocumentChunkHelper.class);
 
     public float cosineSimilarity(float[] a, float[] b) {
         if (a == null || b == null || a.length != b.length) {
@@ -33,29 +33,15 @@ public class DocumentChunkHelper {
 
     public String cleanTextForDatabase(String text) {
         if (text == null || text.isEmpty()) {
-            return text;
+            return "";
         }
 
         String cleaned = text.replace("\u0000", "")
-                .replace("\u0001", "")
-                .replace("\u0002", "")
-                .replace("\u0003", "")
-                .replace("\u0004", "")
-                .replace("\u0005", "")
-                .replace("\u0006", "")
-                .replace("\u0007", "")
-                .replace("\u0008", "")
-                .replace("\u000B", "")
-                .replace("\u000C", "")
-                .replace("\u000E", "")
-                .replace("\u000F", "");
+                .replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]", "")
+                .replaceAll("\\s+", " ")
+                .trim();
 
-        cleaned = cleaned.replaceAll("[\\p{Cntrl}&&[^\r\n\t]]", "");
-
-        if (!text.equals(cleaned)) {
-            logger.info("Text cleaned: removed {} problematic characters", (text.length() - cleaned.length()));
-        }
-
+        log.debug("Cleaned text from {} to {} characters", text.length(), cleaned.length());
         return cleaned;
     }
 }

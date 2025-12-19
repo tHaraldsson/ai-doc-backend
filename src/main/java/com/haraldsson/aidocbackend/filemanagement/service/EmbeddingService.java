@@ -54,7 +54,6 @@ public class EmbeddingService {
             return Mono.empty();
         }
 
-        // Trunkerar texten om den är för lång
         String truncatedText = text.length() > 8000
                 ? text.substring(0, 8000)
                 : text;
