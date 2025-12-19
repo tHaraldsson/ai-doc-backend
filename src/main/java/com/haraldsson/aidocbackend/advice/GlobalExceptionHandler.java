@@ -26,6 +26,60 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final Logger SUPPRESSED_LOGGER = LoggerFactory.getLogger("SUPPRESSED_ERRORS");
+
+    @ExceptionHandler(UnsupportedOperationException.class)
+    @Order(Ordered.HIGHEST_PRECEDENCE + 1)
+    public Mono<ResponseEntity<Object>> handleUnsupportedOperationException(
+            UnsupportedOperationException ex, ServerWebExchange exchange) {
+
+        boolean isReadOnlyHeadersBug = ex.getStackTrace().length > 0 &&
+                ex.getStackTrace()[0].getClassName().contains("ReadOnlyHttpHeaders");
+
+        if (isReadOnlyHeadersBug) {
+            if (SUPPRESSED_LOGGER.isDebugEnabled()) {
+                SUPPRESSED_LOGGER.debug("Suppressing ReadOnlyHttpHeaders bug");
+            }
+            return Mono.empty();
+        }
+
+        log.error("Real UnsupportedOperationException: {}", ex.getMessage(), ex);
+
+        if (exchange.getResponse().isCommitted()) {
+            return Mono.empty();
+        }
+
+        return Mono.just(ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .contentType(MediaType.TEXT_PLAIN)
+                .body("Internal server error"));
+    }
+
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    @Order(Ordered.HIGHEST_PRECEDENCE + 1)
+    public Mono<ResponseEntity<String>> handleHttpMessageNotWritableException(
+            HttpMessageNotWritableException ex, ServerWebExchange exchange) {
+
+        boolean isNoEncoderBug = ex.getMessage() != null &&
+                ex.getMessage().contains("No Encoder for");
+
+        if (isNoEncoderBug) {
+            if (SUPPRESSED_LOGGER.isDebugEnabled()) {
+                SUPPRESSED_LOGGER.debug("Suppressing 'No Encoder' bug: {}", ex.getMessage());
+            }
+            return Mono.empty();
+        }
+
+        log.error("Real HttpMessageNotWritableException: {}", ex.getMessage(), ex);
+
+        if (exchange.getResponse().isCommitted()) {
+            return Mono.empty();
+        }
+
+        return Mono.just(ResponseEntity.status(500)
+                .contentType(MediaType.TEXT_PLAIN)
+                .body("Internal server error"));
+    }
 
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<SimpleErrorResponse> handleUnauthorizedException(
@@ -181,24 +235,11 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    @ExceptionHandler(HttpMessageNotWritableException.class)
-    public Mono<ResponseEntity<String>> handleHttpMessageNotWritableException(
-            HttpMessageNotWritableException ex, ServerWebExchange exchange) {
-
-        log.error("HTTP message not writable: {}", ex.getMessage());
-
-        return Mono.just(ResponseEntity.status(500)
-                .contentType(MediaType.TEXT_PLAIN)
-                .body("Internal server error"));
-    }
-
     @ExceptionHandler(DataAccessResourceFailureException.class)
-    @Order(Ordered.HIGHEST_PRECEDENCE)
     public Mono<ResponseEntity<SimpleErrorResponse>> handleDatabaseConnectionError(
             DataAccessResourceFailureException ex, ServerWebExchange exchange) {
 
         log.error("Database connection failed: {}", ex.getMessage());
-
 
         if (exchange.getResponse().isCommitted()) {
             log.debug("Response already committed, skipping database error response");
@@ -214,8 +255,6 @@ public class GlobalExceptionHandler {
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(errorResponse));
     }
-
-
 
     @ExceptionHandler(org.springframework.r2dbc.UncategorizedR2dbcException.class)
     public Mono<ResponseEntity<SimpleErrorResponse>> handleR2dbcException(
