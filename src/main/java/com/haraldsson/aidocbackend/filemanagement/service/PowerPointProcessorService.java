@@ -1,10 +1,16 @@
 package com.haraldsson.aidocbackend.filemanagement.service;
 
+import com.haraldsson.aidocbackend.advice.exceptions.FileProcessingException;
+import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.xslf.usermodel.*;
+import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 @Service
@@ -13,40 +19,56 @@ public class PowerPointProcessorService {
     public Mono<String> extractTextFromPowerPoint(byte[] pptBytes) {
         return Mono.fromCallable(() -> {
             try (XMLSlideShow ppt = new XMLSlideShow(new ByteArrayInputStream(pptBytes))) {
-                StringBuilder result = new StringBuilder();
-
-                result.append("=== POWERPOINT PRESENTATION ===\n\n");
-                result.append("Total slides: ").append(ppt.getSlides().size()).append("\n\n");
-
-                List<XSLFSlide> slides = ppt.getSlides();
-
-                for (int i = 0; i < slides.size(); i++) {
-                    XSLFSlide slide = slides.get(i);
-
-                    result.append("--- SLIDE ").append(i + 1).append(" ---\n\n");
-
-                    String title = getSlideTitle(slide);
-                    if (!title.isEmpty()) {
-                        result.append("TITLE: ").append(title).append("\n\n");
-                    }
-
-                    String slideText = extractTextFromSlide(slide);
-                    result.append(slideText).append("\n\n");
-
-                    if (!slide.getShapes().stream()
-                            .filter(shape -> shape instanceof XSLFPictureShape)
-                            .toList().isEmpty()) {
-                        result.append("(This slide contains images)\n");
-                    }
-
-                    result.append("\n");
-                }
-
-                return result.toString();
+                return extractPresentationText(ppt);
             } catch (Exception e) {
-                throw new RuntimeException("PowerPoint processing error: " + e.getMessage(), e);
+                throw new FileProcessingException("PowerPoint processing error", e);
             }
         });
+    }
+
+    public Mono<String> streamAndExtractText(FilePart filePart) {
+        return Mono.fromCallable(() -> Files.createTempFile("ppt-", ".pptx"))
+                .flatMap(tempFile ->
+                        filePart.transferTo(tempFile)
+                                .then(Mono.fromCallable(() -> {
+                                    try (XMLSlideShow ppt = new XMLSlideShow(OPCPackage.open(tempFile.toFile()))) {
+                                        return extractPresentationText(ppt);
+                                    } finally {
+                                        Files.deleteIfExists(tempFile);
+                                    }
+                                }))
+                );
+    }
+
+    private String extractPresentationText(XMLSlideShow ppt) {
+        StringBuilder result = new StringBuilder();
+        result.append("=== POWERPOINT PRESENTATION ===\n\n");
+        result.append("Total slides: ").append(ppt.getSlides().size()).append("\n\n");
+
+        List<XSLFSlide> slides = ppt.getSlides();
+
+        for (int i = 0; i < slides.size(); i++) {
+            XSLFSlide slide = slides.get(i);
+            result.append("--- SLIDE ").append(i + 1).append(" ---\n\n");
+
+            String title = getSlideTitle(slide);
+            if (!title.isEmpty()) {
+                result.append("TITLE: ").append(title).append("\n\n");
+            }
+
+            String slideText = extractTextFromSlide(slide);
+            result.append(slideText).append("\n\n");
+
+            if (!slide.getShapes().stream()
+                    .filter(shape -> shape instanceof XSLFPictureShape)
+                    .toList().isEmpty()) {
+                result.append("(This slide contains images)\n");
+            }
+
+            result.append("\n");
+        }
+
+        return result.toString();
     }
 
     private String getSlideTitle(XSLFSlide slide) {
@@ -64,7 +86,6 @@ public class PowerPointProcessorService {
 
     private String extractTextFromSlide(XSLFSlide slide) {
         StringBuilder slideText = new StringBuilder();
-
         for (XSLFShape shape : slide.getShapes()) {
             if (shape instanceof XSLFTextShape) {
                 XSLFTextShape textShape = (XSLFTextShape) shape;
@@ -74,7 +95,6 @@ public class PowerPointProcessorService {
                 }
             }
         }
-
         return slideText.toString();
     }
 }
