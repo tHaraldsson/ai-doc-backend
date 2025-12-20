@@ -43,7 +43,7 @@ public class CustomUserService {
                         return Mono.error(new RuntimeException("Invalid Password"));
                     }
 
-                    String token = jwtTokenProvider.generateToken(username);
+                    String token = jwtTokenProvider.generateToken(user);
                     log.info("Login successful for user: {}, token generated", maskUsername(username));
                     return Mono.just(new AuthResultDTO(token, username));
                 })

@@ -3,12 +3,14 @@ package com.haraldsson.aidocbackend.user.model;
 
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.relational.core.mapping.Table;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -20,6 +22,8 @@ public class CustomUser implements UserDetails{
     private UUID id;
     private String username;
     private String password;
+    @Transient
+    private List<GrantedAuthority> authorities;
     private Boolean accountNonExpired = true;
     private Boolean accountNonLocked = true;
     private Boolean credentialsNonExpired = true;
@@ -31,6 +35,15 @@ public class CustomUser implements UserDetails{
     public CustomUser(String username, String password) {
         this.username = username;
         this.password = password;
+        this.createdAt = LocalDateTime.now();
+        this.authorities = List.of(new SimpleGrantedAuthority("ROLE_USER"));
+    }
+
+    public CustomUser(UUID id, String username, String password, Collection<? extends GrantedAuthority> authorities) {
+        this.id = id;
+        this.username = username;
+        this.password = password;
+        this.authorities = new ArrayList<>(authorities);
         this.createdAt = LocalDateTime.now();
     }
 
@@ -48,7 +61,8 @@ public class CustomUser implements UserDetails{
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        return this.authorities != null ? this.authorities :
+                List.of(new SimpleGrantedAuthority("ROLE_USER"));
     }
 
     @Override
