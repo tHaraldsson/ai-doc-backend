@@ -70,7 +70,7 @@ public class EmbeddingService {
                 .bodyValue(requestBody)
                 .retrieve()
                 .bodyToMono(String.class)
-                .timeout(Duration.ofSeconds(45))  // Timeout per request
+                .timeout(Duration.ofSeconds(30))  // Timeout per request
                 .flatMap(this::parseEmbeddingResponse)
                 .retryWhen(Retry.backoff(2, Duration.ofSeconds(2))
                         .filter(e -> e instanceof ReadTimeoutException))
@@ -79,10 +79,6 @@ public class EmbeddingService {
                 })
                 .doOnError(e -> {
                     logger.error("Error creating embedding after retries: {}", e.getMessage());
-                })
-                .onErrorResume(e -> {
-                    logger.warn("Falling back to empty embedding due to error: {}", e.getMessage());
-                    return Mono.empty();
                 });
     }
 

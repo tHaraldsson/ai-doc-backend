@@ -143,8 +143,12 @@ public class AiService {
                 .flatMap(context -> {
                     log.info("No relevant documents found for question");
 
-                    if (context.contains("No document") || context.contains("No chunks")) {
-                        log.info("No relevant documents found for question");
+                    if (context == null ||
+                            context.contains("No document") ||
+                            context.contains("No chunks") ||
+                            context.contains("Error")) {
+
+                        log.info("No valid context found, using general AI");
                         return askQuestion(question);
                     }
 
@@ -154,10 +158,9 @@ public class AiService {
                     return askQuestion(prompt);
                 })
                 .onErrorResume(e -> {
-                    log.error("Error in AI service for user {}: {}",
-                            maskUserId(userId), e.getMessage(), e);
+                    log.error("Error in AI service: {}", e.getMessage());
                     return Mono.just(new AiResponseDTO(
-                            "An error occurred: " + e.getMessage(),
+                            "Sorry, I couldn't process your question. Please try again.",
                             "error",
                             0
                     ));

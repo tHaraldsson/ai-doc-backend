@@ -259,9 +259,18 @@ public class DocumentService {
                                 return Flux.fromIterable(chunks)
                                         .flatMap(chunk ->
                                                         embeddingService.createEmbedding(chunk.getContent())
-                                                                .doOnNext(embedding -> chunk.setEmbedding(embedding))
-                                                                .thenReturn(chunk),
-                                                2
+                                                                .timeout(Duration.ofSeconds(15))
+                                                                .doOnNext(embedding -> {
+                                                                    chunk.setEmbedding(embedding);
+                                                                    log.debug("Embedding created for chunk {}", chunk.getChunkNumber());
+                                                                })
+                                                                .onErrorResume(e -> {
+                                                                    log.warn("Embedding failed for chunk {}: {}",
+                                                                            chunk.getChunkNumber(), e.getMessage());
+                                                                    return Mono.empty();
+                                                                })
+                                                                .then(Mono.just(chunk)),
+                                                1
                                         )
                                         .collectList()
                                         .flatMap(chunksWithEmbeddings ->
@@ -304,9 +313,18 @@ public class DocumentService {
                                 return Flux.fromIterable(chunks)
                                         .flatMap(chunk ->
                                                         embeddingService.createEmbedding(chunk.getContent())
-                                                                .doOnNext(embedding -> chunk.setEmbedding(embedding))
-                                                                .thenReturn(chunk),
-                                                2
+                                                                .timeout(Duration.ofSeconds(15))
+                                                                .doOnNext(embedding -> {
+                                                                    chunk.setEmbedding(embedding);
+                                                                    log.debug("Embedding created for chunk {}", chunk.getChunkNumber());
+                                                                })
+                                                                .onErrorResume(e -> {
+                                                                    log.warn("Embedding failed for chunk {}: {}",
+                                                                            chunk.getChunkNumber(), e.getMessage());
+                                                                    return Mono.empty();
+                                                                })
+                                                                .then(Mono.just(chunk)),
+                                                1
                                         )
                                         .collectList()
                                         .flatMap(chunksWithEmbeddings ->
@@ -348,9 +366,18 @@ public class DocumentService {
                                 return Flux.fromIterable(chunks)
                                         .flatMap(chunk ->
                                                         embeddingService.createEmbedding(chunk.getContent())
-                                                                .doOnNext(embedding -> chunk.setEmbedding(embedding))
-                                                                .thenReturn(chunk),
-                                                2
+                                                                .timeout(Duration.ofSeconds(15))
+                                                                .doOnNext(embedding -> {
+                                                                    chunk.setEmbedding(embedding);
+                                                                    log.debug("Embedding created for chunk {}", chunk.getChunkNumber());
+                                                                })
+                                                                .onErrorResume(e -> {
+                                                                    log.warn("Embedding failed for chunk {}: {}",
+                                                                            chunk.getChunkNumber(), e.getMessage());
+                                                                    return Mono.empty();
+                                                                })
+                                                                .then(Mono.just(chunk)),
+                                                1
                                         )
                                         .collectList()
                                         .flatMap(chunksWithEmbeddings ->
