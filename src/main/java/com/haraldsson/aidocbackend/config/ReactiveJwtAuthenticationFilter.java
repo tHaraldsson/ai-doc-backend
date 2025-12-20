@@ -1,6 +1,8 @@
 package com.haraldsson.aidocbackend.config;
 
 import com.haraldsson.aidocbackend.user.service.CustomUserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -16,6 +18,8 @@ import reactor.core.publisher.Mono;
 @Component
 public class ReactiveJwtAuthenticationFilter implements WebFilter {
 
+    private final Logger log = LoggerFactory.getLogger(ReactiveJwtAuthenticationFilter.class);
+
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserService customUserService;
 
@@ -27,25 +31,26 @@ public class ReactiveJwtAuthenticationFilter implements WebFilter {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
-        System.out.println("=== REACTIVE JWT FILTER: " + exchange.getRequest().getMethod() + " " + path);
+        log.debug("Reactive JWT Filter: {} {}", exchange.getRequest().getMethod(), path);
 
         // Skip for auth endpoints
         if (path.startsWith("/api/auth/")) {
+            log.debug("Skipping JWT filter for auth endpoint");
             return chain.filter(exchange);
         }
 
         String token = getJwtFromRequest(exchange.getRequest());
 
-        System.out.println("Token present: " + (token != null ? "YES" : "NO"));
+        log.debug("Token present: {}", token != null);
 
         if (token != null && jwtTokenProvider.validateToken(token)) {
             String username = jwtTokenProvider.getUsernameFromToken(token);
-            System.out.println("Valid token for user: " + username);
+            log.debug("Valid token for user: {}", username);
 
             return customUserService.findByUsername(username)
                     .flatMap(user -> {
-                        System.out.println("Reactive Filter - User found: " + user.getUsername());
-                        System.out.println("Reactive Filter - Authorities: " + user.getAuthorities());
+                        log.debug("User found: {}, Authorities: {}",
+                                user.getUsername(), user.getAuthorities());
 
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
@@ -57,7 +62,7 @@ public class ReactiveJwtAuthenticationFilter implements WebFilter {
                     })
                     .switchIfEmpty(chain.filter(exchange));
         } else {
-            System.out.println("JWT Filter - Token is INVALID or missing");
+            log.debug("Token is invalid or missing");
             return chain.filter(exchange);
         }
     }

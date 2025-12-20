@@ -1,5 +1,6 @@
 package com.haraldsson.aidocbackend.filemanagement.model;
 
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
@@ -14,6 +15,7 @@ public class Document {
     @Id
     private UUID id;
 
+    @NotBlank(message = "Filename cannot be empty")
     @Column("file_name")
     private String fileName;
 

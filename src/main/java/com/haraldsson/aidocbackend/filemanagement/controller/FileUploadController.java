@@ -3,8 +3,11 @@ package com.haraldsson.aidocbackend.filemanagement.controller;
 import com.haraldsson.aidocbackend.filemanagement.dto.UploadResponseDTO;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
 import com.haraldsson.aidocbackend.filemanagement.service.DocumentService;
+import com.haraldsson.aidocbackend.filemanagement.utils.FileValidator;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
-import org.springframework.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,26 +21,28 @@ import java.util.UUID;
 @RequestMapping("/api")
 public class FileUploadController {
 
-    private final DocumentService documentService;
+    private static final Logger log = LoggerFactory.getLogger(FileUploadController.class);
 
-    public FileUploadController(DocumentService documentService) {
+    private final DocumentService documentService;
+    private final FileValidator fileValidator;
+
+    public FileUploadController(DocumentService documentService, FileValidator fileValidator) {
         this.documentService = documentService;
+        this.fileValidator = fileValidator;
     }
 
     @PostMapping(value = "/upload", consumes = "multipart/form-data")
-    public Mono<ResponseEntity<UploadResponseDTO>> uploadPdf(
+    public Mono<ResponseEntity<UploadResponseDTO>> uploadFile(
             @RequestPart("file") FilePart filePart,
             @AuthenticationPrincipal CustomUser user) {
 
-        if (user == null) {
-            System.out.println("User is NULL - returning 401");
-            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new UploadResponseDTO("Not Authenticated", null, null)));
-        }
+        log.info("File upload requested by user {}: {}", user.getId(), filePart.filename());
 
-        return documentService.processAndSavePdf(filePart, user)
+        fileValidator.validateFile(filePart);
+
+        return documentService.processAndSaveFile(filePart, user)
                 .map(savedDoc -> {
-                    String preview = savedDoc.getContent().length() > 200
+                    String preview = savedDoc.getContent() != null && savedDoc.getContent().length() > 200
                             ? savedDoc.getContent().substring(0, 200) + "..."
                             : savedDoc.getContent();
 
@@ -46,50 +51,41 @@ public class FileUploadController {
                             savedDoc.getFileName(),
                             preview
                     ));
-                })
-                .onErrorResume(e -> {
-                    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                            .body(new UploadResponseDTO("Upload failed: " + e.getMessage(), null, null)));
                 });
     }
 
-
     @DeleteMapping("/deletedocument/{id}")
-    public Mono<ResponseEntity<UploadResponseDTO>> deleteDocument(@PathVariable("id") UUID id) {
+    public Mono<ResponseEntity<UploadResponseDTO>> deleteDocument(
+            @PathVariable("id") UUID id,
+            @AuthenticationPrincipal CustomUser user) {
+
+        log.info("Delete document requested: documentId={}, userId={}", id, user.getId());
 
         return documentService.deleteDocument(id)
-                .then(Mono.just(ResponseEntity.ok(new UploadResponseDTO(
-                        "Document with id: " + id + " deleted successfully",
-                        null,
-                        null
-                ))))
-                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
-                        .body(new UploadResponseDTO("Error deleting document: " + e.getMessage(), null, null))));
+                .then(Mono.just(ResponseEntity.ok(
+                        new UploadResponseDTO("Document deleted successfully", null, null)
+                )));
     }
 
     @GetMapping("/documents")
-    public Mono<ResponseEntity<Flux<Document>>> getUserDocuments(
-            @AuthenticationPrincipal CustomUser user
-    ) {
-        if (user == null) {
-            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
-        }
+    public Flux<Document> getUserDocuments(
+            @AuthenticationPrincipal CustomUser user) {
 
-        return Mono.just(ResponseEntity.ok(documentService.getAllDocuments(user.getId())));
+        log.info("Get documents requested for user: {}", user.getId());
+        return documentService.getAllDocuments(user.getId());
     }
 
     @GetMapping("/textindb")
     public Mono<ResponseEntity<String>> getUserText(
-            @AuthenticationPrincipal CustomUser user
-    ) {
-        if (user == null) {
-            return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
-        }
+            @AuthenticationPrincipal CustomUser user) {
 
+        log.info("Get user text requested for user: {}", user.getId());
         return documentService.getTextByUserId(user.getId())
-                .map(text -> ResponseEntity.ok(text))
-                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError()
-                        .body("Error: " + e.getMessage())));
+                .map(text -> ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body(text))
+                .defaultIfEmpty(ResponseEntity.ok()
+                        .contentType(MediaType.TEXT_PLAIN)
+                        .body("No documents found for this user"));
     }
-
 }

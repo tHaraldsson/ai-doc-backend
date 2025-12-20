@@ -17,12 +17,13 @@ public class CorsConfig {
 
         config.setAllowedOriginPatterns(Arrays.asList(
                 "https://ai-doc-frontend-ouqn.onrender.com",
+                "https://ai-doc-backend-6faa.onrender.com",
                 "http://localhost:3000",
                 "http://localhost:5173"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "Cache-Control", "Accept"));
-        config.setExposedHeaders(Arrays.asList("Authorization", "Content-Type"));
+        config.setExposedHeaders(Arrays.asList("Authorization", "Set-Cookie"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
