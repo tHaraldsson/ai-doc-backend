@@ -24,7 +24,7 @@ This project was developed as part of a degree thesis, focusing on scalability, 
 
 ## Tech Stack
 
-- Java 17
+- Java 21
 - Spring Boot (WebFlux)
 - Spring Security (Reactive)
 - R2DBC (Reactive PostgreSQL)
