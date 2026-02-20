@@ -7,6 +7,7 @@ import com.haraldsson.aidocbackend.user.dto.LoginRequestDTO;
 import com.haraldsson.aidocbackend.user.dto.RegisterRequestDTO;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
 import com.haraldsson.aidocbackend.user.service.CustomUserService;
+import io.jsonwebtoken.Claims;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,8 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -120,7 +123,7 @@ public class AuthController {
     }
 
     @GetMapping("/user")
-    public Mono<ResponseEntity<CustomUser>> getCurrentUser(
+    public Mono<ResponseEntity<Map<String, Object>>> getCurrentUser(
             @CookieValue(value = "jwt", required = false) String jwtToken) {
 
         if (jwtToken == null || !jwtTokenProvider.validateToken(jwtToken)) {
@@ -128,19 +131,28 @@ public class AuthController {
             return Mono.just(ResponseEntity.status(401).build());
         }
 
-        String username = jwtTokenProvider.getUsernameFromToken(jwtToken);
-        String maskedUsername = maskUsername(username);
-        log.debug("Current user request for: {}", maskedUsername);
+        try {
+            Claims claims = jwtTokenProvider.getAllClaimsFromToken(jwtToken);
 
+            String username = claims.getSubject();
+            String userId = claims.get("userId", String.class);
+            List<String> roles = claims.get("roles", List.class);
 
-        return customUserService.findByUsername(username)
-                .map(user -> {
-                    log.debug("User found for request: {}", maskedUsername);
-                    return ResponseEntity.ok().body(user);
-                })
-                .defaultIfEmpty(ResponseEntity.status(401).build())
-                .doOnError(e -> log.error("Error fetching user {}: {}",
-                        maskedUsername, e.getMessage()));
+            String maskedUsername = maskUsername(username);
+            log.debug("Current user request for: {}", maskedUsername);
+
+            Map<String, Object> userInfo = Map.of(
+                    "id", userId,
+                    "username", username,
+                    "roles", roles
+            );
+
+            return Mono.just(ResponseEntity.ok().body(userInfo));
+
+        } catch (Exception e) {
+            log.error("Error parsing JWT for user request: {}", e.getMessage());
+            return Mono.just(ResponseEntity.status(401).build());
+        }
     }
 
     // hjälpmetod för att dölja username

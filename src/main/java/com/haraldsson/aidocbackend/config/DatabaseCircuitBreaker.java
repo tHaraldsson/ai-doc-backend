@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 
 import javax.naming.ServiceUnavailableException;
 import java.time.Duration;
@@ -32,6 +33,9 @@ public class DatabaseCircuitBreaker {
         }
 
         return operation
+                .retryWhen(Retry.backoff(2, Duration.ofSeconds(1))
+                        .filter(e -> e instanceof DataAccessResourceFailureException)
+                        .doBeforeRetry(signal -> log.warn("Circuit breaker retrying DB operation, attempt {}", signal.totalRetries() + 1)))
                 .doOnError(e -> {
                     if (e instanceof DataAccessResourceFailureException) {
                         lastFailureTime.set(System.currentTimeMillis());

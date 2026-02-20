@@ -141,7 +141,7 @@ public class AiService {
                         log.debug("Context found for question: {} chars",
                                 context.length()))
                 .flatMap(context -> {
-                    log.info("No relevant documents found for question");
+                    log.debug("Checking context: {}", context != null ? "exists" : "null");
 
                     if (context == null ||
                             context.contains("No document") ||
@@ -152,6 +152,7 @@ public class AiService {
                         return askQuestion(question);
                     }
 
+                    log.info("Found valid context, creating prompt with document context");
                     String prompt = createDocumentPrompt(context, question);
                     log.debug("Created prompt with context length: {}", prompt.length());
 

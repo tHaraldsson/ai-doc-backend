@@ -1,10 +1,14 @@
 package com.haraldsson.aidocbackend.config;
 
+import com.haraldsson.aidocbackend.user.model.CustomUser;
 import com.haraldsson.aidocbackend.user.service.CustomUserService;
+import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextImpl;
@@ -14,6 +18,10 @@ import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Component
 public class ReactiveJwtAuthenticationFilter implements WebFilter {
@@ -44,25 +52,37 @@ public class ReactiveJwtAuthenticationFilter implements WebFilter {
         log.debug("Token present: {}", token != null);
 
         if (token != null && jwtTokenProvider.validateToken(token)) {
-            String username = jwtTokenProvider.getUsernameFromToken(token);
-            log.debug("Valid token for user: {}", username);
+            try {
+                Claims claims = jwtTokenProvider.getAllClaimsFromToken(token);
 
-            return customUserService.findByUsername(username)
-                    .flatMap(user -> {
-                        log.debug("User found: {}, Authorities: {}",
-                                user.getUsername(), user.getAuthorities());
+                String username = claims.getSubject();
+                UUID userId = UUID.fromString(claims.get("userId", String.class));
+                List<String> roles = claims.get("roles", List.class);
 
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+                List<GrantedAuthority> authorities = roles.stream()
+                        .map(role -> new SimpleGrantedAuthority(role))
+                        .collect(Collectors.toList());
 
-                        SecurityContext context = new SecurityContextImpl(authentication);
+                CustomUser userFromToken = new CustomUser(
+                        userId,
+                        username,
+                        "",
+                        authorities
+                );
 
-                        return chain.filter(exchange)
-                                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(context)));
-                    })
-                    .switchIfEmpty(chain.filter(exchange));
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(userFromToken, null, authorities);
+
+                SecurityContext context = new SecurityContextImpl(authentication);
+
+                return chain.filter(exchange)
+                        .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(context)));
+
+            } catch (Exception e) {
+                log.warn("Could not create auth from token: {}", e.getMessage());
+                return chain.filter(exchange);
+            }
         } else {
-            log.debug("Token is invalid or missing");
             return chain.filter(exchange);
         }
     }
