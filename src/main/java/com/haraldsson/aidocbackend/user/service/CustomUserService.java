@@ -4,12 +4,15 @@ import com.haraldsson.aidocbackend.config.JwtTokenProvider;
 import com.haraldsson.aidocbackend.user.dto.AuthResultDTO;
 import com.haraldsson.aidocbackend.user.model.CustomUser;
 import com.haraldsson.aidocbackend.user.repository.CustomUserRepository;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.UUID;
 
 
@@ -32,6 +35,9 @@ public class CustomUserService {
         log.info("Login attempt for user: {}", maskUsername(username));
 
         return customUserRepository.findByUsername(username)
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                        .filter(e -> e instanceof DataAccessResourceFailureException)
+                        .doBeforeRetry(signal -> log.warn("Retrying login DB call, attempt {}", signal.totalRetries() + 1)))
                 .doOnNext(user -> log.debug("User found: {}", maskUsername(user.getUsername())))
                 .flatMap(user -> {
                     boolean passwordMatches = passwordEncoder.matches(password, user.getPassword());
@@ -60,6 +66,9 @@ public class CustomUserService {
         log.info("Registration attempt for user: {}", maskUsername(username));
 
         return customUserRepository.findByUsername(username)
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                        .filter(e -> e instanceof DataAccessResourceFailureException)
+                        .doBeforeRetry(signal -> log.warn("Retrying register DB call, attempt {}", signal.totalRetries() + 1)))
                 .flatMap(existingUser -> {
                     log.warn("Registration failed - user already exists: {}",
                             maskUsername(username));

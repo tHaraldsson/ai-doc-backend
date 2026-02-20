@@ -1,7 +1,6 @@
 package com.haraldsson.aidocbackend.filemanagement.service;
 
 import com.haraldsson.aidocbackend.advice.exceptions.FileProcessingException;
-import com.haraldsson.aidocbackend.advice.exceptions.ResourceNotFoundException;
 import com.haraldsson.aidocbackend.config.DatabaseCircuitBreaker;
 import com.haraldsson.aidocbackend.filemanagement.dto.ChunkWithSimilarityDTO;
 import com.haraldsson.aidocbackend.filemanagement.model.Document;
@@ -14,6 +13,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -22,11 +22,9 @@ import reactor.util.retry.Retry;
 
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -81,16 +79,14 @@ public class DocumentService {
                                     .flatMap(existingDocs -> {
                                         if (!existingDocs.isEmpty()) {
                                             return Flux.fromIterable(existingDocs)
-                                                    .flatMap(oldDoc -> circuitBreaker.execute(
+                                                    .flatMap(oldDoc ->
                                                             deleteDocumentAndChunks(oldDoc.getId())
-                                                    ))
-                                                    .then(circuitBreaker.execute(
+                                                    )
+                                                    .then(
                                                             saveDocumentWithChunks(filePart, user, text)
-                                                    ));
+                                                    );
                                         } else {
-                                            return circuitBreaker.execute(
-                                                    saveDocumentWithChunks(filePart, user, text)
-                                            );
+                                            return saveDocumentWithChunks(filePart, user, text);
                                         }
                                     });
                         })
@@ -230,55 +226,47 @@ public class DocumentService {
         int overlap = 200;
         int numChunks = (int) Math.ceil((double) cleanedText.length() / (chunkSize - overlap));
 
-        return Flux.range(0, numChunks)
-                .map(i -> {
-                    int start = i * (chunkSize - overlap);
-                    int end = Math.min(start + chunkSize, cleanedText.length());
-                    if (start >= cleanedText.length()) return null;
+        // Step 1: Create chunk objects in memory
+        List<DocumentChunk> chunkList = new ArrayList<>();
+        for (int i = 0; i < numChunks; i++) {
+            int start = i * (chunkSize - overlap);
+            int end = Math.min(start + chunkSize, cleanedText.length());
+            if (start >= cleanedText.length()) break;
 
-                    String chunkText = cleanedText.substring(start, end);
+            String chunkText = cleanedText.substring(start, end);
+            DocumentChunk chunk = new DocumentChunk(
+                    documentId, userId, filename, chunkText, i + 1, start, end
+            );
+            chunkList.add(chunk);
+        }
 
-                    DocumentChunk chunk = new DocumentChunk(
-                            documentId,
-                            userId,
-                            filename,
-                            chunkText,
-                            i + 1,
-                            start,
-                            end
-                    );
-                    return chunk;
+        // Step 2: Save all chunks (quick DB operation, releases connection)
+        return documentChunkRepository.saveAll(chunkList)
+                .collectList()
+                .flatMap(savedChunks -> {
+                    // Step 3: Create embeddings one by one (no DB connection held)
+                    return Flux.fromIterable(savedChunks)
+                            .concatMap(chunk ->
+                                    embeddingService.createEmbedding(chunk.getContent())
+                                            .timeout(Duration.ofSeconds(15))
+                                            .doOnNext(embedding -> chunk.setEmbedding(embedding))
+                                            .onErrorResume(e -> {
+                                                log.warn("Embedding failed for chunk {}: {}",
+                                                        chunk.getChunkNumber(), e.getMessage());
+                                                return Mono.empty();
+                                            })
+                                            .thenReturn(chunk)
+                            )
+                            .collectList();
                 })
-                .filter(Objects::nonNull)
-                .buffer(10)
-                .delayElements(Duration.ofMillis(300))
-                .flatMap(batch -> {
-                    return documentChunkRepository.saveAll(batch)
-                            .collectList()
-                            .flatMap(chunks -> {
-                                return Flux.fromIterable(chunks)
-                                        .flatMap(chunk ->
-                                                        embeddingService.createEmbedding(chunk.getContent())
-                                                                .timeout(Duration.ofSeconds(15))
-                                                                .doOnNext(embedding -> {
-                                                                    chunk.setEmbedding(embedding);
-                                                                    log.debug("Embedding created for chunk {}", chunk.getChunkNumber());
-                                                                })
-                                                                .onErrorResume(e -> {
-                                                                    log.warn("Embedding failed for chunk {}: {}",
-                                                                            chunk.getChunkNumber(), e.getMessage());
-                                                                    return Mono.empty();
-                                                                })
-                                                                .then(Mono.just(chunk)),
-                                                1
-                                        )
-                                        .collectList()
-                                        .flatMap(chunksWithEmbeddings ->
-                                                documentChunkRepository.saveAll(chunksWithEmbeddings).then()
-                                        );
-                            });
-                }, 1)
-                .then()
+                .flatMap(chunksWithEmbeddings -> {
+                    // Step 4: Batch-update chunks that got embeddings (quick DB operation)
+                    List<DocumentChunk> withEmbeddings = chunksWithEmbeddings.stream()
+                            .filter(c -> c.getEmbedding() != null)
+                            .toList();
+                    if (withEmbeddings.isEmpty()) return Mono.empty();
+                    return documentChunkRepository.saveAll(withEmbeddings).then();
+                })
                 .doOnSuccess(v -> log.info("ALL PDF CHUNKS SAVED WITH EMBEDDINGS"))
                 .doOnError(e -> log.error("PDF-CHUNKING FAILED: {}", e.getMessage()));
     }
@@ -288,106 +276,95 @@ public class DocumentService {
         log.info("=== CREATING EXCEL-CHUNKS (WITH EMBEDDINGS) ===");
         String[] worksheets = excelText.split("--- WORKSHEET: ");
 
-        return Flux.range(1, worksheets.length - 1)
-                .map(i -> {
-                    String worksheetText = worksheets[i].trim();
-                    if (worksheetText.isEmpty()) return null;
+        List<DocumentChunk> chunkList = new ArrayList<>();
+        for (int i = 1; i < worksheets.length; i++) {
+            String worksheetText = worksheets[i].trim();
+            if (worksheetText.isEmpty()) continue;
 
-                    DocumentChunk chunk = new DocumentChunk();
-                    chunk.setDocumentId(documentId);
-                    chunk.setUserId(userId);
-                    chunk.setFilename(filename);
-                    chunk.setContent("--- WORKSHEET: " + worksheetText);
-                    chunk.setChunkNumber(i);
-                    chunk.setStartIndex(0);
-                    chunk.setEndIndex(worksheetText.length());
-                    return chunk;
+            DocumentChunk chunk = new DocumentChunk();
+            chunk.setDocumentId(documentId);
+            chunk.setUserId(userId);
+            chunk.setFilename(filename);
+            chunk.setContent("--- WORKSHEET: " + worksheetText);
+            chunk.setChunkNumber(i);
+            chunk.setStartIndex(0);
+            chunk.setEndIndex(worksheetText.length());
+            chunkList.add(chunk);
+        }
+
+        return documentChunkRepository.saveAll(chunkList)
+                .collectList()
+                .flatMap(savedChunks ->
+                        Flux.fromIterable(savedChunks)
+                                .concatMap(chunk ->
+                                        embeddingService.createEmbedding(chunk.getContent())
+                                                .timeout(Duration.ofSeconds(15))
+                                                .doOnNext(embedding -> chunk.setEmbedding(embedding))
+                                                .onErrorResume(e -> {
+                                                    log.warn("Embedding failed for chunk {}: {}",
+                                                            chunk.getChunkNumber(), e.getMessage());
+                                                    return Mono.empty();
+                                                })
+                                                .thenReturn(chunk)
+                                )
+                                .collectList()
+                )
+                .flatMap(chunksWithEmbeddings -> {
+                    List<DocumentChunk> withEmbeddings = chunksWithEmbeddings.stream()
+                            .filter(c -> c.getEmbedding() != null)
+                            .toList();
+                    if (withEmbeddings.isEmpty()) return Mono.empty();
+                    return documentChunkRepository.saveAll(withEmbeddings).then();
                 })
-                .filter(Objects::nonNull)
-                .buffer(5)
-                .delayElements(Duration.ofMillis(400))
-                .flatMap(batch -> {
-                    return documentChunkRepository.saveAll(batch)
-                            .collectList()
-                            .flatMap(chunks -> {
-                                return Flux.fromIterable(chunks)
-                                        .flatMap(chunk ->
-                                                        embeddingService.createEmbedding(chunk.getContent())
-                                                                .timeout(Duration.ofSeconds(15))
-                                                                .doOnNext(embedding -> {
-                                                                    chunk.setEmbedding(embedding);
-                                                                    log.debug("Embedding created for chunk {}", chunk.getChunkNumber());
-                                                                })
-                                                                .onErrorResume(e -> {
-                                                                    log.warn("Embedding failed for chunk {}: {}",
-                                                                            chunk.getChunkNumber(), e.getMessage());
-                                                                    return Mono.empty();
-                                                                })
-                                                                .then(Mono.just(chunk)),
-                                                1
-                                        )
-                                        .collectList()
-                                        .flatMap(chunksWithEmbeddings ->
-                                                documentChunkRepository.saveAll(chunksWithEmbeddings).then()
-                                        );
-                            });
-                }, 1)
-                .then()
                 .doOnSuccess(v -> log.info("ALL EXCEL-CHUNKS SAVED WITH EMBEDDINGS"));
     }
 
     private Mono<Void> createPowerPointChunks(UUID documentId, UUID userId,
                                               String filename, String powerpointText) {
-        log.info("=== CREATING POWERPOINT-CHUNKS (BATCHED) ===");
+        log.info("=== CREATING POWERPOINT-CHUNKS (WITH EMBEDDINGS) ===");
         String[] slides = powerpointText.split("--- SLIDE ");
 
-        return Flux.range(1, slides.length - 1)
-                .map(i -> {
-                    String slideText = slides[i].trim();
-                    if (slideText.isEmpty()) return null;
+        List<DocumentChunk> chunkList = new ArrayList<>();
+        for (int i = 1; i < slides.length; i++) {
+            String slideText = slides[i].trim();
+            if (slideText.isEmpty()) continue;
 
-                    DocumentChunk chunk = new DocumentChunk();
-                    chunk.setDocumentId(documentId);
-                    chunk.setUserId(userId);
-                    chunk.setFilename(filename);
-                    chunk.setContent("--- SLIDE " + slideText);
-                    chunk.setChunkNumber(i);
-                    chunk.setStartIndex(0);
-                    chunk.setEndIndex(slideText.length());
-                    return chunk;
+            DocumentChunk chunk = new DocumentChunk();
+            chunk.setDocumentId(documentId);
+            chunk.setUserId(userId);
+            chunk.setFilename(filename);
+            chunk.setContent("--- SLIDE " + slideText);
+            chunk.setChunkNumber(i);
+            chunk.setStartIndex(0);
+            chunk.setEndIndex(slideText.length());
+            chunkList.add(chunk);
+        }
+
+        return documentChunkRepository.saveAll(chunkList)
+                .collectList()
+                .flatMap(savedChunks ->
+                        Flux.fromIterable(savedChunks)
+                                .concatMap(chunk ->
+                                        embeddingService.createEmbedding(chunk.getContent())
+                                                .timeout(Duration.ofSeconds(15))
+                                                .doOnNext(embedding -> chunk.setEmbedding(embedding))
+                                                .onErrorResume(e -> {
+                                                    log.warn("Embedding failed for chunk {}: {}",
+                                                            chunk.getChunkNumber(), e.getMessage());
+                                                    return Mono.empty();
+                                                })
+                                                .thenReturn(chunk)
+                                )
+                                .collectList()
+                )
+                .flatMap(chunksWithEmbeddings -> {
+                    List<DocumentChunk> withEmbeddings = chunksWithEmbeddings.stream()
+                            .filter(c -> c.getEmbedding() != null)
+                            .toList();
+                    if (withEmbeddings.isEmpty()) return Mono.empty();
+                    return documentChunkRepository.saveAll(withEmbeddings).then();
                 })
-                .filter(Objects::nonNull)
-                .buffer(5)
-                .delayElements(Duration.ofMillis(500))
-                .flatMap(batch -> {
-                    return documentChunkRepository.saveAll(batch)
-                            .collectList()
-                            .flatMap(chunks -> {
-                                return Flux.fromIterable(chunks)
-                                        .flatMap(chunk ->
-                                                        embeddingService.createEmbedding(chunk.getContent())
-                                                                .timeout(Duration.ofSeconds(15))
-                                                                .doOnNext(embedding -> {
-                                                                    chunk.setEmbedding(embedding);
-                                                                    log.debug("Embedding created for chunk {}", chunk.getChunkNumber());
-                                                                })
-                                                                .onErrorResume(e -> {
-                                                                    log.warn("Embedding failed for chunk {}: {}",
-                                                                            chunk.getChunkNumber(), e.getMessage());
-                                                                    return Mono.empty();
-                                                                })
-                                                                .then(Mono.just(chunk)),
-                                                1
-                                        )
-                                        .collectList()
-                                        .flatMap(chunksWithEmbeddings ->
-
-                                                documentChunkRepository.saveAll(chunksWithEmbeddings).then()
-                                        );
-                            });
-                }, 1)
-                .then()
-                .doOnSuccess(v -> log.info("ALL POWERPOINT-CHUNKS SAVED (BATCHED)"))
+                .doOnSuccess(v -> log.info("ALL POWERPOINT-CHUNKS SAVED WITH EMBEDDINGS"))
                 .doOnError(e -> log.error("POWERPOINT-CHUNKING FAILED: {}", e.getMessage()));
     }
 
@@ -560,7 +537,10 @@ public class DocumentService {
     }
 
     public Flux<Document> getAllDocuments(UUID userID) {
-        return documentRepository.findByUserId(userID);
+        return documentRepository.findByUserId(userID)
+                .retryWhen(Retry.backoff(3, Duration.ofSeconds(1))
+                        .filter(e -> e instanceof DataAccessResourceFailureException)
+                        .doBeforeRetry(signal -> log.warn("Retrying getAllDocuments, attempt {}", signal.totalRetries() + 1)));
     }
 
     public Mono<Document> save(Document document) {
