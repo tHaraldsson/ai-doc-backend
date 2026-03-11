@@ -12,9 +12,12 @@ This project was developed as part of a degree thesis, focusing on scalability, 
 - User authentication with JWT (HttpOnly cookies)
 - Secure file upload (PDF, Excel, PowerPoint)
 - Text extraction and preprocessing
-- Document chunking for large texts
-- AI-powered question answering
-- Embedding-based semantic search for improved answers
+- Document chunking (~800 chars, 150 overlap)
+- AI-powered question answering via GPT-3.5 Turbo
+- Embedding generation using `text-embedding-ada-002`
+- In-memory cosine similarity search for relevant chunk selection
+- Keyword-based fallback search if embedding fails
+- Retry logic with exponential backoff on embedding timeouts
 - Reactive and fully asynchronous backend
 - Per-user document isolation
 - Connection pooling and circuit breaker for stability
@@ -30,7 +33,7 @@ This project was developed as part of a degree thesis, focusing on scalability, 
 - R2DBC (Reactive PostgreSQL)
 - PostgreSQL (Supabase + PgBouncer)
 - Flyway (database migrations)
-- OpenAI API
+- OpenAI API (GPT-3.5 Turbo for question answering, text-embedding-ada-002 for semantic embeddings)
 - Docker
 - Gradle
 
@@ -41,8 +44,9 @@ This project was developed as part of a degree thesis, focusing on scalability, 
 - Reactive stack using Spring WebFlux and Project Reactor (`Mono` / `Flux`)
 - Stateless authentication using JWT stored in HttpOnly cookies
 - Asynchronous database access with R2DBC
-- Chunk-based document processing for efficient AI usage
-- Embedding comparison to select the most relevant document chunks
+- Chunk-based document processing (~800 characters, 150 overlap) for efficient AI usage
+- In-memory cosine similarity to select the top 5 most relevant document chunks
+- Keyword-based fallback search if embedding generation fails
 - Circuit breaker to protect the system from overloads or external API failures
 
 ---
@@ -87,14 +91,17 @@ _All protected endpoints require authentication._
 
 1. User uploads a document
 2. File is validated
-3. Text is extracted
-4. Text is split into chunks (~1000 characters)
-5. Each chunk is embedded using the AI model
-6. Embeddings are stored in the database
+3. Text is extracted (PDF, Excel, PowerPoint supported)
+4. Text is split into chunks (~800 characters, 150 overlap)
+5. Each chunk is embedded using `text-embedding-ada-002`
+6. Embeddings are stored as JSON in PostgreSQL (`embedding_json` column)
 7. User question is embedded
-8. Closest matching chunks are selected
-9. Selected chunks + question are sent to the AI
-10. AI response is returned to the user
+8. Cosine similarity is computed in-memory between question and all chunks
+9. Top 5 most relevant chunks are selected
+10. Selected chunks + question are sent to GPT-3.5 Turbo
+11. AI response is returned to the user
+
+> Falls back to keyword search if embedding generation fails.
 
 This improves answer relevance, reduces token usage, and increases performance.
 
@@ -144,6 +151,7 @@ docker run -p 8080:8080 ai-doc-backend
 - Global exception handling
 - Custom business exceptions
 - Circuit breaker to prevent cascading failures
+- Retry logic with exponential backoff on embedding timeouts (2 retries, 2s base delay)
 - Graceful handling of external API downtime
 - Proper logging without exposing sensitive data
 
@@ -156,6 +164,15 @@ docker run -p 8080:8080 ai-doc-backend
 - Designed for horizontal scaling
 - Secure cookie-based authentication
 - Ready for cloud deployment (Render or similar platforms)
+
+---
+
+## Frontend
+
+A companion frontend is available and integrated with this backend:  
+[https://ai-doc-frontend-ouqn.onrender.com](https://ai-doc-frontend-ouqn.onrender.com)
+
+CORS is configured to allow requests from this origin.
 
 ---
 
